@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_audio_query/flutter_audio_query.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:equalizer_flutter_custom/src/CustomEqualizer.dart';
 import 'package:provider/provider.dart';
-import 'package:equalizer_flutter_custom/src/EqalizerProvider/EqualizerProvider.dart';
+import 'package:equalizer_flutter_custom/equalizer_flutter_custom.dart';
 
 void main() {
   runApp(const MyApp());
@@ -37,25 +35,31 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late List<SongInfo> songs;
+  final List<Map<String, String>> songs = [
+    {
+      'displayName': 'Sample track 1',
+      'filePath':
+          'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    },
+    {
+      'displayName': 'Sample track 2',
+      'filePath':
+          'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    },
+  ];
 
-  late AudioPlayer audioPlayer;
-
-  bool isLoading = true;
-  getSOngs() async {
-    FlutterAudioQuery audioQuery = FlutterAudioQuery();
-    List<SongInfo> songsd = await audioQuery.getSongs();
-    setState(() {
-      songs = songsd;
-      isLoading = false;
-    });
-  }
+  late final AudioPlayer audioPlayer;
 
   @override
   void initState() {
-    // TODO: implement initState
+    super.initState();
     audioPlayer = AudioPlayer();
-    getSOngs();
+  }
+
+  @override
+  void dispose() {
+    audioPlayer.dispose();
+    super.dispose();
   }
 
   @override
@@ -64,43 +68,58 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: const Text("Equalizer"),
       ),
-      // body:
-      body: isLoading
-          ? const CircularProgressIndicator()
-          : ListView.builder(
-              itemCount: songs.length,
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    audioPlayer.setUrl(songs[index].filePath);
-                    audioPlayer.play();
-                    Future.delayed(const Duration(milliseconds: 300))
-                        .then((value) {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => CustomEqualizer(
-                              isEqEnabled: true,
-                              playerSessionId:
-                                  audioPlayer.androidAudioSessionId!,
-                              bandTextColor: Colors.green,
-                              sliderBoxHeight: 220,
-                              sliderBoxPadding: 10,
-                              appbarElevation: 0,
-                              appBarShadowColor: Colors.grey,
-                              titleTextStyle:
-                                  const TextStyle(color: Colors.red),
-                              sliderBoxBorderRadius: BorderRadius.circular(20),
-                            ),
-                          ));
-                    });
-                  },
-                  child: ListTile(
-                    title: Text(songs[index].displayName),
+      body: ListView.builder(
+        itemCount: songs.length,
+        itemBuilder: (context, index) {
+          final s = songs[index];
+          return InkWell(
+            onTap: () async {
+              final url = s['filePath']!;
+              try {
+                await audioPlayer.setUrl(url);
+                await audioPlayer.play();
+                // give platform time to initialize session id
+                await Future.delayed(const Duration(milliseconds: 300));
+                if (!mounted) return;
+                final sessionId = audioPlayer.androidAudioSessionId;
+                if (sessionId == null || sessionId <= 0) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content:
+                        Text('Audio session not available on this device.'),
+                  ));
+                  return;
+                }
+                if (!mounted) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CustomEqualizer(
+                      isEqEnabled: true,
+                      playerSessionId: sessionId,
+                      bandTextColor: Colors.green,
+                      sliderBoxHeight: 220,
+                      sliderBoxPadding: 10,
+                      appbarElevation: 0,
+                      appBarShadowColor: Colors.grey,
+                      titleTextStyle: const TextStyle(color: Colors.red),
+                      sliderBoxBorderRadius: BorderRadius.circular(20),
+                    ),
                   ),
                 );
-              },
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('Error playing track: $e'),
+                ));
+              }
+            },
+            child: ListTile(
+              title: Text(s['displayName']!),
             ),
+          );
+        },
+      ),
     );
   }
 }

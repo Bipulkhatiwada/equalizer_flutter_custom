@@ -1,6 +1,8 @@
 import 'package:equalizer_flutter/equalizer_flutter.dart';
 import 'package:equalizer_flutter_custom/src/CustomSlider.dart';
+import 'package:equalizer_flutter_custom/src/EqalizerProvider/EqualizerProvider.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 Widget Customeq(
     min,
@@ -22,46 +24,59 @@ Widget Customeq(
     Color? bandTextColor,
     double? bandTextFontSize,
     double? sliderBoxPadding) {
-  int bandId = 0;
   return FutureBuilder<List<int>>(
     future: EqualizerFlutter.getCenterBandFreqs(),
     builder: (context, snapshot) {
       if (snapshot.connectionState == ConnectionState.done) {
-        if (snapshot.hasData) {
-          return Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: snapshot.data!
-                    .map((freq) => CustomSlider(
-                          context,
-                          bandId++,
-                          freq,
-                          min,
-                          max,
-                          sliderBoxHeight,
-                          sliderBoxBackgroundColor,
-                          sliderBoxBorderRadius,
-                          inactiveTrackBar,
-                          midPointBgColor,
-                          midPointColorActive,
-                          midPointColorInactive,
-                          midPointIcon,
-                          activeDisabledTrackBarColor,
-                          inactiveDisabledTrackBarColor,
-                          activeTrackBarMaxColor,
-                          activeTrackBarMinColor,
-                          dragIndicatorActiveColor,
-                          dragIndicatorInactiveColor,
-                          bandTextColor,
-                          bandTextFontSize,
-                          sliderBoxPadding,
-                        ))
-                    // .map((freq) => Container())
-                    .toList(),
-              )
-            ],
+        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          final freqs = snapshot.data!;
+
+          // Use Consumer to rebuild when provider changes
+          return Consumer<EqualizerProvider>(
+            builder: (context, provider, child) {
+              // Ensure bands array is populated with the correct length
+              if (provider.bands.length < freqs.length) {
+                // Initialize bands synchronously to avoid loading state
+                provider.bands = List<int>.filled(freqs.length, 0);
+                // Fetch actual band levels in the background
+                Future.microtask(() => provider.fetchBandLevels());
+              }
+
+              return Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: List.generate(
+                        freqs.length,
+                        (index) => CustomSlider(
+                              context,
+                              index,
+                              freqs[index],
+                              min,
+                              max,
+                              sliderBoxHeight,
+                              sliderBoxBackgroundColor,
+                              sliderBoxBorderRadius,
+                              inactiveTrackBar,
+                              midPointBgColor,
+                              midPointColorActive,
+                              midPointColorInactive,
+                              midPointIcon,
+                              activeDisabledTrackBarColor,
+                              inactiveDisabledTrackBarColor,
+                              activeTrackBarMaxColor,
+                              activeTrackBarMinColor,
+                              dragIndicatorActiveColor,
+                              dragIndicatorInactiveColor,
+                              bandTextColor,
+                              bandTextFontSize,
+                              sliderBoxPadding,
+                            )),
+                  )
+                ],
+              );
+            },
           );
         } else {
           return const Text("Audio SessionId empty");
