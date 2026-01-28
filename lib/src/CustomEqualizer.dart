@@ -202,23 +202,50 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                             .onSurface
                             .withValues(alpha: 0.12),
                     activeColor: widget.activeSwitchColor ??
-                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context).colorScheme.onPrimary,
                     activeTrackColor: widget.activeSwitchTrackColor ??
-                        Theme.of(context).colorScheme.primary,
+                        Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.5),
+                    trackOutlineColor: WidgetStateProperty.resolveWith<Color?>(
+                      (Set<WidgetState> states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return Theme.of(context).colorScheme.primary;
+                        }
+                        return null;
+                      },
+                    ),
                   );
             },
           )
         ],
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Content
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              widget.bgColor ?? Theme.of(context).colorScheme.surface,
+              (widget.bgColor ?? Theme.of(context).colorScheme.surface)
+                  .withValues(alpha: 0.95),
+            ],
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Content
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                   // Presets dropdown - use Consumer to always get latest state
                   Consumer<EqualizerProvider>(
                     builder: (context, provider, child) {
@@ -231,28 +258,61 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Presets',
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant)),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.library_music_rounded,
+                                    size: 20,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text('Presets',
+                                      style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant)),
+                                ],
+                              ),
                           const SizedBox(height: 12),
-                          Container(
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(16),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer
+                                          .withValues(alpha: 0.4),
+                                      Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: Theme.of(context)
                                     .colorScheme
-                                    .outline
-                                    .withValues(alpha: 0.2),
-                                width: 1,
+                                        .primary
+                                        .withValues(alpha: 0.3),
+                                    width: 1.5,
                               ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.1),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                             ),
                             child: DropdownButton<String>(
                               value: presets.contains(provider.currentp)
@@ -324,7 +384,31 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                     },
                   ),
 
-                  // Bass and pitch controls row
+                      // Bass and pitch controls section
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.tune_rounded,
+                              size: 20,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Audio Controls',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
@@ -372,12 +456,11 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                         initialValue: value.bassval,
                                         key: ValueKey('bass-${value.bassval}'),
                                         appearance: CircularSliderAppearance(
-                                          size: 130,
+                                              size: 140,
                                           customWidths: CustomSliderWidths(
-                                            progressBarWidth: 8,
-                                            trackWidth: 4,
-                                            handlerSize:
-                                                0, // Hide handler for cleaner look
+                                                progressBarWidth: 10,
+                                                trackWidth: 5,
+                                                handlerSize: 12,
                                           ),
                                           customColors: CustomSliderColors(
                                             dotColor: enabled
@@ -386,9 +469,13 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                                     .colorScheme
                                                     .onSurface
                                                     .withValues(alpha: 0.3),
-                                            progressBarColor: enabled
-                                                ? activeColor
-                                                : Colors.transparent,
+                                                progressBarColors: enabled
+                                                    ? [
+                                                        activeColor,
+                                                        activeColor.withValues(
+                                                            alpha: 0.7),
+                                                      ]
+                                                    : [Colors.transparent],
                                             trackColor: inactiveColor,
                                             trackColors: [
                                               Theme.of(context)
@@ -400,23 +487,24 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                                   .secondary
                                                   .withValues(alpha: 0.2),
                                             ],
+                                                hideShadow: false,
                                           ),
                                           infoProperties: InfoProperties(
                                             mainLabelStyle: TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w600,
+                                                  fontSize: 24,
+                                                  fontWeight: FontWeight.bold,
                                               color: enabled
-                                                  ? Theme.of(context)
-                                                      .colorScheme
-                                                      .primary
+                                                      ? activeColor
                                                   : Theme.of(context)
                                                       .colorScheme
                                                       .onSurface
-                                                      .withValues(alpha: 0.5),
+                                                          .withValues(
+                                                              alpha: 0.4),
                                             ),
                                             topLabelStyle: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  letterSpacing: 1.2,
                                               color: Theme.of(context)
                                                   .colorScheme
                                                   .onSurfaceVariant,
@@ -426,9 +514,13 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                                 '${(val / 10).round()}%',
                                           ),
                                         ),
-                                        onChangeEnd: enabled
+                                            onChange: enabled
                                             ? (val) {
                                                 value.setbassval(val);
+                                                  }
+                                                : null,
+                                            onChangeEnd: enabled
+                                                ? (val) {
                                                 widget.onBassChanged?.call(val);
                                               }
                                             : null,
@@ -436,32 +528,87 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  if (enabled &&
-                                      value.bassval !=
-                                          EqualizerProvider.defaultBassVal)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .surfaceContainerHighest,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: IconButton(
-                                        onPressed: () {
-                                          value.resetBass();
-                                          widget.onBassChanged?.call(
-                                              EqualizerProvider.defaultBassVal);
-                                        },
-                                        icon: Icon(
-                                          Icons.refresh_rounded,
-                                          size: 18,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                      SizedBox(
+                                        height: 44,
+                                        child: Center(
+                                          child: AnimatedOpacity(
+                                            opacity: (enabled &&
+                                                    value.bassval !=
+                                                        EqualizerProvider
+                                                            .defaultBassVal)
+                                                ? 1.0
+                                                : 0.0,
+                                            duration: const Duration(
+                                                milliseconds: 200),
+                                            child: AnimatedScale(
+                                              scale: (enabled &&
+                                                      value.bassval !=
+                                                          EqualizerProvider
+                                                              .defaultBassVal)
+                                                  ? 1.0
+                                                  : 0.8,
+                                              duration: const Duration(
+                                                  milliseconds: 200),
+                                              child: Material(
+                                                color: Colors.transparent,
+                                                child: InkWell(
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
+                                                  onTap: () {
+                                                    value.resetBass();
+                                                    widget.onBassChanged?.call(
+                                                        EqualizerProvider
+                                                            .defaultBassVal);
+                                                  },
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            10),
+                                                    decoration: BoxDecoration(
+                                                      gradient: LinearGradient(
+                                                        colors: [
+                                                          Theme.of(context)
+                                                              .colorScheme
+                                                              .primaryContainer,
+                                                          Theme.of(context)
+                                                              .colorScheme
+                                                              .primaryContainer
+                                                              .withValues(
+                                                                  alpha: 0.7),
+                                                        ],
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              20),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .primary
+                                                                  .withValues(
+                                                                      alpha:
+                                                                          0.2),
+                                                          blurRadius: 8,
+                                                          offset: const Offset(
+                                                              0, 2),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    child: Icon(
+                                                      Icons.restart_alt_rounded,
+                                                      size: 20,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .primary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                        padding: const EdgeInsets.all(8),
                                       ),
-                                    ),
                                 ],
                               );
                             },
@@ -512,12 +659,11 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                         key:
                                             ValueKey('pitch-${value.pitchval}'),
                                         appearance: CircularSliderAppearance(
-                                          size: 130,
+                                              size: 140,
                                           customWidths: CustomSliderWidths(
-                                            progressBarWidth: 8,
-                                            trackWidth: 4,
-                                            handlerSize:
-                                                0, // Hide handler for cleaner look
+                                                progressBarWidth: 10,
+                                                trackWidth: 5,
+                                                handlerSize: 12,
                                           ),
                                           customColors: CustomSliderColors(
                                             dotColor: enabled
@@ -526,9 +672,13 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                                     .colorScheme
                                                     .onSurface
                                                     .withValues(alpha: 0.3),
-                                            progressBarColor: enabled
-                                                ? activeColor
-                                                : Colors.transparent,
+                                                progressBarColors: enabled
+                                                    ? [
+                                                        activeColor,
+                                                        activeColor.withValues(
+                                                            alpha: 0.7),
+                                                      ]
+                                                    : [Colors.transparent],
                                             trackColor: inactiveColor,
                                             trackColors: [
                                               Theme.of(context)
@@ -540,23 +690,24 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                                   .secondary
                                                   .withValues(alpha: 0.2),
                                             ],
+                                                hideShadow: false,
                                           ),
                                           infoProperties: InfoProperties(
                                             mainLabelStyle: TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w600,
+                                                  fontSize: 24,
+                                                  fontWeight: FontWeight.bold,
                                               color: enabled
-                                                  ? Theme.of(context)
-                                                      .colorScheme
-                                                      .secondary
+                                                      ? activeColor
                                                   : Theme.of(context)
                                                       .colorScheme
                                                       .onSurface
-                                                      .withValues(alpha: 0.5),
+                                                          .withValues(
+                                                              alpha: 0.4),
                                             ),
                                             topLabelStyle: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  letterSpacing: 1.2,
                                               color: Theme.of(context)
                                                   .colorScheme
                                                   .onSurfaceVariant,
@@ -566,9 +717,13 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                                 '${val.toStringAsFixed(2)}x',
                                           ),
                                         ),
-                                        onChangeEnd: enabled
+                                            onChange: enabled
                                             ? (val) {
                                                 value.setpitchval(val);
+                                                  }
+                                                : null,
+                                            onChangeEnd: enabled
+                                                ? (val) {
                                                 widget.onPitchChanged
                                                     ?.call(val);
                                               }
@@ -577,33 +732,87 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  if (enabled &&
-                                      value.pitchval !=
-                                          EqualizerProvider.defaultPitchVal)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .surfaceContainerHighest,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: IconButton(
-                                        onPressed: () {
-                                          value.resetPitch();
-                                          widget.onPitchChanged?.call(
-                                              EqualizerProvider
-                                                  .defaultPitchVal);
-                                        },
-                                        icon: Icon(
-                                          Icons.refresh_rounded,
-                                          size: 18,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                      SizedBox(
+                                        height: 44,
+                                        child: Center(
+                                          child: AnimatedOpacity(
+                                            opacity: (enabled &&
+                                                    value.pitchval !=
+                                                        EqualizerProvider
+                                                            .defaultPitchVal)
+                                                ? 1.0
+                                                : 0.0,
+                                            duration: const Duration(
+                                                milliseconds: 200),
+                                            child: AnimatedScale(
+                                              scale: (enabled &&
+                                                      value.pitchval !=
+                                                          EqualizerProvider
+                                                              .defaultPitchVal)
+                                                  ? 1.0
+                                                  : 0.8,
+                                              duration: const Duration(
+                                                  milliseconds: 200),
+                                              child: Material(
+                                                color: Colors.transparent,
+                                                child: InkWell(
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
+                                                  onTap: () {
+                                                    value.resetPitch();
+                                                    widget.onPitchChanged?.call(
+                                                        EqualizerProvider
+                                                            .defaultPitchVal);
+                                                  },
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            10),
+                                                    decoration: BoxDecoration(
+                                                      gradient: LinearGradient(
+                                                        colors: [
+                                                          Theme.of(context)
+                                                              .colorScheme
+                                                              .secondaryContainer,
+                                                          Theme.of(context)
+                                                              .colorScheme
+                                                              .secondaryContainer
+                                                              .withValues(
+                                                                  alpha: 0.7),
+                                                        ],
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              20),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .secondary
+                                                                  .withValues(
+                                                                      alpha:
+                                                                          0.2),
+                                                          blurRadius: 8,
+                                                          offset: const Offset(
+                                                              0, 2),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    child: Icon(
+                                                      Icons.restart_alt_rounded,
+                                                      size: 20,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .secondary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                        padding: const EdgeInsets.all(8),
                                       ),
-                                    ),
                                 ],
                               );
                             },
@@ -680,9 +889,11 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                       );
                     },
                   ),
-                ],
-              ),
-            ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

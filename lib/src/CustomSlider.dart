@@ -43,17 +43,42 @@ Widget CustomSlider(
           Container(
             height: sliderBoxHeight ?? 240,
             decoration: BoxDecoration(
-              color: sliderBoxBackgroundColor ??
-                  Theme.of(context).colorScheme.surface,
-              borderRadius: sliderBoxBorderRadius ?? BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  sliderBoxBackgroundColor ??
+                      Theme.of(context).colorScheme.surface,
+                  (sliderBoxBackgroundColor ??
+                          Theme.of(context).colorScheme.surface)
+                      .withValues(alpha: 0.95),
+                ],
+              ),
+              borderRadius: sliderBoxBorderRadius ?? BorderRadius.circular(24),
+              border: Border.all(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.15),
+                width: 1.5,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Theme.of(context)
                       .colorScheme
-                      .shadow
-                      .withValues(alpha: 0.1),
-                  blurRadius: 12,
+                      .primary
+                      .withValues(alpha: 0.08),
+                  blurRadius: 16,
                   offset: const Offset(0, 4),
+                  spreadRadius: 2,
+                ),
+                BoxShadow(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .shadow
+                      .withValues(alpha: 0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
@@ -69,16 +94,34 @@ Widget CustomSlider(
                   padding:
                       const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                   child: FlutterSlider(
+                      values: [value.bands[bandId].toDouble()],
+                      rtl: true,
+                      max: max,
+                      min: min,
+                      onDragCompleted: (handlerIndex, lowerValue, upperValue) {
+                        value.changeFreq(bandId, lowerValue.toInt());
+                      },
                     key: ValueKey(
                         'band-${bandId}-${value.bands[bandId]}-${value.isApplyingPreset}'),
                     trackBar: FlutterSliderTrackBar(
                       inactiveTrackBar: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
-                        color: inactiveTrackBar ??
-                            Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: 0.1),
+                          gradient: LinearGradient(
+                            colors: [
+                              (inactiveTrackBar ??
+                                      Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.1))
+                                  .withValues(alpha: 0.15),
+                              (inactiveTrackBar ??
+                                      Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.1))
+                                  .withValues(alpha: 0.05),
+                            ],
+                          ),
                       ),
                       centralWidget: Container(
                         width: 32,
@@ -157,20 +200,22 @@ Widget CustomSlider(
                             ? [
                                 BoxShadow(
                                   color: (Theme.of(context).colorScheme.primary)
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 16,
-                                  spreadRadius: 4,
+                                            .withValues(alpha: 0.4),
+                                    blurRadius: 20,
+                                    spreadRadius: 6,
                                 ),
                               ]
                             : [],
                       ),
                       child: Container(
-                        width: 32,
-                        height: 32,
+                          width: 40,
+                          height: 40,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: value.isEqEnabled
-                              ? RadialGradient(
+                                ? LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
                                   colors: [
                                     Theme.of(context).colorScheme.primary,
                                     Theme.of(context).colorScheme.secondary,
@@ -185,23 +230,34 @@ Widget CustomSlider(
                                   .withValues(alpha: 0.3),
                           border: Border.all(
                             color: value.isEqEnabled
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.7)
+                                  ? Colors.white.withValues(alpha: 0.8)
                                 : Theme.of(context)
                                     .colorScheme
                                     .onSurface
                                     .withValues(alpha: 0.5),
-                            width: 2,
+                              width: 2.5,
                           ),
+                            boxShadow: value.isEqEnabled
+                                ? [
+                                    BoxShadow(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : [],
                         ),
                         child: Center(
-                          child: Icon(
-                            Icons.tune_rounded,
-                            size: 18,
-                            color: value.isEqEnabled
-                                ? dragIndicatorActiveColor ?? Colors.white
+                            child: Container(
+                              width: 20,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(2),
+                                color: value.isEqEnabled
+                                    ? dragIndicatorActiveColor ?? Colors.white
                                 : dragIndicatorInactiveColor ??
                                     Theme.of(context)
                                         .colorScheme
@@ -211,15 +267,9 @@ Widget CustomSlider(
                         ),
                       ),
                     ),
-                    values: [value.bands[bandId].toDouble()],
-                    rtl: true,
-                    max: max,
-                    min: min,
-                    onDragCompleted: (handlerIndex, lowerValue, upperValue) {
-                      value.changeFreq(bandId, lowerValue.toInt());
-                    },
+                    
                   ),
-                );
+                    ));
 
                 // Wrap with loading overlay when applying preset
                 return Stack(
@@ -264,39 +314,77 @@ Widget CustomSlider(
                 children: [
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).colorScheme.primaryContainer,
+                          Theme.of(context)
+                              .colorScheme
+                              .primaryContainer
+                              .withValues(alpha: 0.7),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.2),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Text(
                       "${value.bands[bandId].toInt()}dB",
                       style: TextStyle(
                         fontSize: bandTextFontSize != null
                             ? bandTextFontSize! - 2
-                            : 11,
-                        fontWeight: FontWeight.w600,
+                            : 12,
+                        fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.primary,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.secondaryContainer,
-                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).colorScheme.secondaryContainer,
+                          Theme.of(context)
+                              .colorScheme
+                              .secondaryContainer
+                              .withValues(alpha: 0.7),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .secondary
+                              .withValues(alpha: 0.15),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Text(
                       "${(freq / 1000).toStringAsFixed(freq >= 10000 ? 1 : 0)}kHz",
                       style: TextStyle(
                         fontSize: bandTextFontSize != null
-                            ? bandTextFontSize! - 3
-                            : 10,
-                        fontWeight: FontWeight.w500,
+                            ? bandTextFontSize! - 2
+                            : 11,
+                        fontWeight: FontWeight.w600,
                         color:
                             Theme.of(context).colorScheme.onSecondaryContainer,
+                        letterSpacing: 0.3,
                       ),
                     ),
                   ),
