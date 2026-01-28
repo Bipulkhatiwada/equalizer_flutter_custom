@@ -191,11 +191,14 @@ class EqualizerProvider extends ChangeNotifier {
 
   Future<void> loadSavedSettings() async {
     try {
+      print('EqualizerProvider: loadSavedSettings() - fetching saved prefs');
       final prefs = await SharedPreferences.getInstance();
       final savedPitch = prefs.getDouble(_kPitchKey);
       final savedBass = prefs.getDouble(_kBassKey);
       final savedPreset = prefs.getString(_kPresetKey);
       final savedCustom = prefs.getBool(_kCustomKey);
+      print(
+          'EqualizerProvider: loadSavedSettings() - got saved values -> pitch: $savedPitch, bass: $savedBass, preset: $savedPreset, custom: $savedCustom');
 
       if (savedPitch != null) pitchval = savedPitch;
       if (savedBass != null) bassval = savedBass;
@@ -213,6 +216,7 @@ class EqualizerProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_kPitchKey, pitchval);
+      debugPrint('EqualizerProvider: _savePitch - Saved pitch: $pitchval');
     } catch (e) {
       print('EqualizerProvider: _savePitch error: $e');
     }

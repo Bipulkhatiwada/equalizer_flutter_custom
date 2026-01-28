@@ -3,7 +3,6 @@ import 'package:equalizer_flutter_custom/src/EqalizerProvider/EqualizerProvider.
 import 'package:equalizer_flutter_custom/src/Customeq.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 
 class CustomEqualizer extends StatefulWidget {
   const CustomEqualizer(
@@ -111,35 +110,59 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
   }
 
   Future<void> _iniaudio() async {
+    print(
+        'CustomEqualizer: _iniaudio start, sessionId=${widget.playerSessionId}');
+
+    // Try to initialize the native equalizer, but continue even if it fails so
+    // persisted settings are still loaded and applied.
     try {
-      await EqualizerFlutter.init(widget.playerSessionId);
-      if (!mounted) return;
-      final provider = context.read<EqualizerProvider>();
-      provider.setEqEnabled(widget.isEqEnabled);
+      await EqualizerFlutter.init(widget.playerSessionId).timeout(
+        const Duration(seconds: 2),
+      );
+      print('CustomEqualizer: Equalizer init succeeded');
+    } catch (e) {
+      print('CustomEqualizer: Equalizer init failed or timed out: $e');
+    }
 
-      // Load persisted settings if available
-      await provider.loadSavedSettings();
+    if (!mounted) {
+      print('CustomEqualizer: widget no longer mounted after init, aborting');
+      return;
+    }
 
-      // Check if values were actually loaded from storage by comparing with defaults
-      bool pitchLoadedFromStorage =
-          provider.pitchval != EqualizerProvider.defaultPitchVal;
-      bool bassLoadedFromStorage =
-          provider.bassval != EqualizerProvider.defaultBassVal;
+    final provider = context.read<EqualizerProvider>();
+    provider.setEqEnabled(widget.isEqEnabled);
 
-      // If widget provided initial values (from audio player), apply them only if no saved values were loaded from storage
-      if (widget.initialPitch != null && !pitchLoadedFromStorage) {
-        provider.pitchval = widget.initialPitch!;
-      }
-      if (widget.initialBass != null && !bassLoadedFromStorage) {
-        provider.bassval = widget.initialBass!;
-      }
+    // Load persisted settings if available (always attempt this)
+    print('CustomEqualizer: calling provider.loadSavedSettings()');
+    await provider.loadSavedSettings();
+    print(
+        'CustomEqualizer: loadSavedSettings complete -> pitch=${provider.pitchval}, bass=${provider.bassval}, preset=${provider.currentp}');
 
-      // Default to Custom unless a preset has been selected previously
-      if (provider.currentp.isEmpty) {
-        provider.custom = true;
-        provider.currentp = 'Custom';
-      }
+    // Check if values were actually loaded from storage by comparing with defaults
+    bool pitchLoadedFromStorage =
+        provider.pitchval != EqualizerProvider.defaultPitchVal;
+    bool bassLoadedFromStorage =
+        provider.bassval != EqualizerProvider.defaultBassVal;
 
+    // If widget provided initial values (from audio player), apply them only if no saved values were loaded from storage
+    if (widget.initialPitch != null && !pitchLoadedFromStorage) {
+      provider.pitchval = widget.initialPitch!;
+      print(
+          'CustomEqualizer: applied initialPitch from widget: ${provider.pitchval}');
+    }
+    if (widget.initialBass != null && !bassLoadedFromStorage) {
+      provider.bassval = widget.initialBass!;
+      print(
+          'CustomEqualizer: applied initialBass from widget: ${provider.bassval}');
+    }
+
+    // Default to Custom unless a preset has been selected previously
+    if (provider.currentp.isEmpty) {
+      provider.custom = true;
+      provider.currentp = 'Custom';
+    }
+
+    try {
       await provider.getPresest();
 
       // Ensure saved preset still exists else fall back to Custom
@@ -167,6 +190,114 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
     } catch (e) {
       print('CustomEqualizer: Error setting preset $presetName: $e');
     }
+  }
+
+  void _showLinearAudioControls(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final provider = context.read<EqualizerProvider>();
+        return ChangeNotifierProvider.value(
+            value: provider,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                top: 12,
+                left: 16,
+                right: 16,
+              ),
+              child: Consumer<EqualizerProvider>(
+                builder: (context, value, child) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text('Audio Controls',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Bass (linear)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('Bass'),
+                        subtitle: Slider(
+                          value: value.bassval,
+                          min: 0,
+                          max: 1000,
+                          divisions: 100,
+                          label: '${(value.bassval / 10).round()}%',
+                          onChanged: value.isEqEnabled
+                              ? (v) => value.setbassval(v)
+                              : null,
+                          onChangeEnd: value.isEqEnabled
+                              ? (v) => widget.onBassChanged?.call(v)
+                              : null,
+                        ),
+                        trailing: IconButton(
+                          tooltip: 'Reset Bass',
+                          icon: Icon(Icons.restart_alt_rounded,
+                              color: Theme.of(context).colorScheme.primary),
+                          onPressed: () {
+                            value.resetBass();
+                            widget.onBassChanged
+                                ?.call(EqualizerProvider.defaultBassVal);
+                          },
+                        ),
+                      ),
+                      // Pitch (linear)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('Pitch'),
+                        subtitle: Slider(
+                          value: value.pitchval,
+                          min: 0.5,
+                          max: 2.0,
+                          divisions: 150,
+                          label: '${value.pitchval.toStringAsFixed(2)}x',
+                          onChanged: (v) {
+                            value.setpitchval(v);
+                            widget.onPitchChanged?.call(v);
+                          },
+                          onChangeEnd: (v) => widget.onPitchChanged?.call(v),
+                        ),
+                        trailing: IconButton(
+                          tooltip: 'Reset Pitch',
+                          icon: Icon(Icons.restart_alt_rounded,
+                              color: Theme.of(context).colorScheme.primary),
+                          onPressed: () {
+                            value.resetPitch();
+                            widget.onPitchChanged
+                                ?.call(EqualizerProvider.defaultPitchVal);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  );
+                },
+              ),
+            ));
+      },
+    );
   }
 
   String dropdownValue = 'Dog';
@@ -236,9 +367,10 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
         child: Center(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              spacing: 16,
               children: [
                 // Content
                 Padding(
@@ -274,95 +406,61 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                                           color: Theme.of(context)
                                               .colorScheme
                                               .onSurfaceVariant)),
+                                  const Spacer(),
+                                  DropdownButton<String>(
+                                    value: presets.contains(provider.currentp)
+                                        ? provider.currentp
+                                        : (provider.custom
+                                            ? null
+                                            : presets.first),
+                                    hint: Text('Custom',
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant)),
+                                    isExpanded: false,
+                                    underline: const SizedBox(),
+                                    dropdownColor:
+                                        Theme.of(context).colorScheme.surface,
+                                    icon: Icon(
+                                      Icons.arrow_drop_down_rounded,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      size: 28,
+                                    ),
+                                    items: presets
+                                        .map((p) => DropdownMenuItem<String>(
+                                              value: p,
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(p,
+                                                    style: TextStyle(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .onSurface,
+                                                        fontSize: 14)),
+                                              ),
+                                            ))
+                                        .toList(),
+                                    onChanged: provider.isEqEnabled
+                                        ? (v) {
+                                            if (v != null) {
+                                              print(
+                                                  'CustomEqualizer: dropdown selected => $v');
+                                              _setPreset(context, v);
+                                            }
+                                          }
+                                        : null,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ],
                               ),
-                          const SizedBox(height: 12),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Theme.of(context)
-                                          .colorScheme
-                                          .primaryContainer
-                                          .withValues(alpha: 0.4),
-                                      Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHighest,
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                        .primary
-                                        .withValues(alpha: 0.3),
-                                    width: 1.5,
-                              ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.1),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                            ),
-                            child: DropdownButton<String>(
-                              value: presets.contains(provider.currentp)
-                                  ? provider.currentp
-                                  : (provider.custom ? null : presets.first),
-                              hint: Text('Custom',
-                                  style: TextStyle(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant)),
-                              isExpanded: true,
-                              underline: const SizedBox(),
-                              dropdownColor:
-                                  Theme.of(context).colorScheme.surface,
-                              icon: Icon(
-                                Icons.arrow_drop_down_rounded,
-                                color: Theme.of(context).colorScheme.primary,
-                                size: 28,
-                              ),
-                              items: presets
-                                  .map((p) => DropdownMenuItem<String>(
-                                        value: p,
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                          child: Text(p,
-                                              style: TextStyle(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface,
-                                                  fontSize: 14)),
-                                        ),
-                                      ))
-                                  .toList(),
-                              onChanged: provider.isEqEnabled
-                                  ? (v) {
-                                      if (v != null) {
-                                        print(
-                                            'CustomEqualizer: dropdown selected => $v');
-                                        _setPreset(context, v);
-                                      }
-                                    }
-                                  : null,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
+                             
                           if (provider.isApplyingPreset) ...[
                             const SizedBox(height: 12),
                             ClipRRect(
@@ -381,514 +479,437 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                           const SizedBox(height: 20),
                         ],
                       );
-                    },
-                  ),
+                        },
+                      ),
+                      FutureBuilder<List<int>>(
+                        future: EqualizerFlutter.getBandLevelRange(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                                child: CircularProgressIndicator());
+                          }
 
-                      // Bass and pitch controls section
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.tune_rounded,
-                              size: 20,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Audio Controls',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                          if (!snapshot.hasData || snapshot.data!.length < 2) {
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
                                 color: Theme.of(context)
                                     .colorScheme
-                                    .onSurfaceVariant,
+                                    .surfaceVariant,
+                                borderRadius: BorderRadius.circular(8),
                               ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text('Equalizer unavailable',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface)),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                      'Session ID: ${widget.playerSessionId}\n'
+                                      'Data: ${snapshot.data}\n'
+                                      'Error: ${snapshot.error}\n'
+                                      'Make sure audio is playing and try reopening.',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withValues(alpha: 0.7))),
+                                ],
+                              ),
+                            );
+                          }
+
+                          // We have valid band range data
+                          return Customeq(
+                            snapshot.data![0].toDouble(),
+                            snapshot.data![1].toDouble(),
+                            widget.sliderBoxHeight,
+                            widget.sliderBoxBackgroundColor,
+                            widget.sliderBoxBorderRadius,
+                            widget.inactiveTrackBar,
+                            widget.midPointBgColor,
+                            widget.midPointColorActive,
+                            widget.midPointColorInactive,
+                            widget.midPointIcon,
+                            widget.activeDisabledTrackBarColor,
+                            widget.inactiveDisabledTrackBarColor,
+                            widget.activeTrackBarMaxColor,
+                            widget.activeTrackBarMinColor,
+                            widget.dragIndicatorActiveColor,
+                            widget.dragIndicatorInactiveColor,
+                            widget.bandTextColor,
+                            widget.bandTextFontSize,
+                            widget.sliderBoxPadding,
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      // Bass and pitch controls section
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Audio Controls',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
-                          ],
-                        ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            tooltip: 'Show linear audio controls',
+                            icon: Icon(Icons.view_list_rounded,
+                                color: Theme.of(context).colorScheme.primary),
+                            onPressed: () => _showLinearAudioControls(context),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // Bass
-                        Expanded(
-                          child: Consumer<EqualizerProvider>(
-                            builder: (context, value, child) {
-                              final bool enabled = value.isEqEnabled;
-                              final Color activeColor =
-                                  Theme.of(context).colorScheme.primary;
-                              final Color inactiveColor = Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.2);
+                      // Container(
+                      //   padding: const EdgeInsets.symmetric(horizontal: 16),
+                      //   child: Row(
+                      //     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      //     children: [
+                      //       // Bass
+                      //       Expanded(
+                      //         child: Consumer<EqualizerProvider>(
+                      //           builder: (context, value, child) {
+                      //             final bool enabled = value.isEqEnabled;
+                      //             final Color activeColor =
+                      //                 Theme.of(context).colorScheme.primary;
+                      //             final Color inactiveColor = Theme.of(context)
+                      //                 .colorScheme
+                      //                 .onSurface
+                      //                 .withValues(alpha: 0.2);
 
-                              return Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerLow,
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .shadow
-                                              .withValues(alpha: 0.05),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: AnimatedOpacity(
-                                      duration:
-                                          const Duration(milliseconds: 250),
-                                      opacity: enabled ? 1.0 : 0.4,
-                                      child: SleekCircularSlider(
-                                        min: 0,
-                                        max: 1000,
-                                        initialValue: value.bassval,
-                                        key: ValueKey('bass-${value.bassval}'),
-                                        appearance: CircularSliderAppearance(
-                                              size: 140,
-                                          customWidths: CustomSliderWidths(
-                                                progressBarWidth: 10,
-                                                trackWidth: 5,
-                                                handlerSize: 12,
-                                          ),
-                                          customColors: CustomSliderColors(
-                                            dotColor: enabled
-                                                ? activeColor
-                                                : Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurface
-                                                    .withValues(alpha: 0.3),
-                                                progressBarColors: enabled
-                                                    ? [
-                                                        activeColor,
-                                                        activeColor.withValues(
-                                                            alpha: 0.7),
-                                                      ]
-                                                    : [Colors.transparent],
-                                            trackColor: inactiveColor,
-                                            trackColors: [
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withValues(alpha: 0.2),
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .secondary
-                                                  .withValues(alpha: 0.2),
-                                            ],
-                                                hideShadow: false,
-                                          ),
-                                          infoProperties: InfoProperties(
-                                            mainLabelStyle: TextStyle(
-                                                  fontSize: 24,
-                                                  fontWeight: FontWeight.bold,
-                                              color: enabled
-                                                      ? activeColor
-                                                  : Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface
-                                                          .withValues(
-                                                              alpha: 0.4),
-                                            ),
-                                            topLabelStyle: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                  letterSpacing: 1.2,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                            topLabelText: 'BASS',
-                                            modifier: (double val) =>
-                                                '${(val / 10).round()}%',
-                                          ),
-                                        ),
-                                            onChange: enabled
-                                            ? (val) {
-                                                value.setbassval(val);
-                                                  }
-                                                : null,
-                                            onChangeEnd: enabled
-                                                ? (val) {
-                                                widget.onBassChanged?.call(val);
-                                              }
-                                            : null,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                      SizedBox(
-                                        height: 44,
-                                        child: Center(
-                                          child: AnimatedOpacity(
-                                            opacity: (enabled &&
-                                                    value.bassval !=
-                                                        EqualizerProvider
-                                                            .defaultBassVal)
-                                                ? 1.0
-                                                : 0.0,
-                                            duration: const Duration(
-                                                milliseconds: 200),
-                                            child: AnimatedScale(
-                                              scale: (enabled &&
-                                                      value.bassval !=
-                                                          EqualizerProvider
-                                                              .defaultBassVal)
-                                                  ? 1.0
-                                                  : 0.8,
-                                              duration: const Duration(
-                                                  milliseconds: 200),
-                                              child: Material(
-                                                color: Colors.transparent,
-                                                child: InkWell(
-                                                  borderRadius:
-                                                      BorderRadius.circular(20),
-                                                  onTap: () {
-                                                    value.resetBass();
-                                                    widget.onBassChanged?.call(
-                                                        EqualizerProvider
-                                                            .defaultBassVal);
-                                                  },
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                            10),
-                                                    decoration: BoxDecoration(
-                                                      gradient: LinearGradient(
-                                                        colors: [
-                                                          Theme.of(context)
-                                                              .colorScheme
-                                                              .primaryContainer,
-                                                          Theme.of(context)
-                                                              .colorScheme
-                                                              .primaryContainer
-                                                              .withValues(
-                                                                  alpha: 0.7),
-                                                        ],
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              20),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color:
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .primary
-                                                                  .withValues(
-                                                                      alpha:
-                                                                          0.2),
-                                                          blurRadius: 8,
-                                                          offset: const Offset(
-                                                              0, 2),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    child: Icon(
-                                                      Icons.restart_alt_rounded,
-                                                      size: 20,
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .primary,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 24),
+                      //             return Column(
+                      //               children: [
+                      //                 Container(
+                      //                   padding: const EdgeInsets.all(16),
+                      //                   decoration: BoxDecoration(
+                      //                     color: Theme.of(context)
+                      //                         .colorScheme
+                      //                         .surfaceContainerLow,
+                      //                     borderRadius: BorderRadius.circular(20),
+                      //                     boxShadow: [
+                      //                       BoxShadow(
+                      //                         color: Theme.of(context)
+                      //                             .colorScheme
+                      //                             .shadow
+                      //                             .withValues(alpha: 0.05),
+                      //                         blurRadius: 8,
+                      //                         offset: const Offset(0, 4),
+                      //                       ),
+                      //                     ],
+                      //                   ),
+                      //                   child: AnimatedOpacity(
+                      //                     duration:
+                      //                         const Duration(milliseconds: 250),
+                      //                     opacity: enabled ? 1.0 : 0.4,
+                      //                         child: Column(
+                      //                           children: [
+                      //                             Slider(
+                      //                               value: value.bassval,
+                      //                               min: 0,
+                      //                               max: 1000,
+                      //                               divisions: 100,
+                      //                               label:
+                      //                                   '${(value.bassval / 10).round()}%',
+                      //                               onChanged: enabled
+                      //                                   ? (v) => value.setbassval(v)
+                      //                                   : null,
+                      //                               onChangeEnd: enabled
+                      //                                   ? (v) => widget
+                      //                                       .onBassChanged
+                      //                                       ?.call(v)
+                      //                                   : null,
+                      //                         ),
+                      //                             const SizedBox(height: 6),
+                      //                             Text(
+                      //                               '${(value.bassval / 10).round()}%',
+                      //                               style: TextStyle(
+                      //                                 fontWeight: FontWeight.w600,
+                      //                             color: enabled
+                      //                                     ? activeColor
+                      //                                 : Theme.of(context)
+                      //                                     .colorScheme
+                      //                                     .onSurface
+                      //                                         .withValues(
+                      //                                             alpha: 0.6),
+                      //                               ),
+                      //                             ),
+                      //                           ],
+                      //                     ),
+                      //                   ),
+                      //                 ),
+                      //                 const SizedBox(height: 8),
+                      //                     SizedBox(
+                      //                       height: 44,
+                      //                       child: Center(
+                      //                         child: AnimatedOpacity(
+                      //                           opacity: (enabled &&
+                      //                                   value.bassval !=
+                      //                                       EqualizerProvider
+                      //                                           .defaultBassVal)
+                      //                               ? 1.0
+                      //                               : 0.0,
+                      //                           duration: const Duration(
+                      //                               milliseconds: 200),
+                      //                           child: AnimatedScale(
+                      //                             scale: (enabled &&
+                      //                                     value.bassval !=
+                      //                                         EqualizerProvider
+                      //                                             .defaultBassVal)
+                      //                                 ? 1.0
+                      //                                 : 0.8,
+                      //                             duration: const Duration(
+                      //                                 milliseconds: 200),
+                      //                             child: Material(
+                      //                               color: Colors.transparent,
+                      //                               child: InkWell(
+                      //                                 borderRadius:
+                      //                                     BorderRadius.circular(20),
+                      //                                 onTap: () {
+                      //                                   value.resetBass();
+                      //                                   widget.onBassChanged?.call(
+                      //                                       EqualizerProvider
+                      //                                           .defaultBassVal);
+                      //                                 },
+                      //                                 child: Container(
+                      //                                   padding:
+                      //                                       const EdgeInsets.all(
+                      //                                           10),
+                      //                                   decoration: BoxDecoration(
+                      //                                     gradient: LinearGradient(
+                      //                                       colors: [
+                      //                                         Theme.of(context)
+                      //                                             .colorScheme
+                      //                                             .primaryContainer,
+                      //                                         Theme.of(context)
+                      //                                             .colorScheme
+                      //                                             .primaryContainer
+                      //                                             .withValues(
+                      //                                                 alpha: 0.7),
+                      //                                       ],
+                      //                                     ),
+                      //                                     borderRadius:
+                      //                                         BorderRadius.circular(
+                      //                                             20),
+                      //                                     boxShadow: [
+                      //                                       BoxShadow(
+                      //                                         color:
+                      //                                             Theme.of(context)
+                      //                                                 .colorScheme
+                      //                                                 .primary
+                      //                                                 .withValues(
+                      //                                                     alpha:
+                      //                                                         0.2),
+                      //                                         blurRadius: 8,
+                      //                                         offset: const Offset(
+                      //                                             0, 2),
+                      //                                       ),
+                      //                                     ],
+                      //                                   ),
+                      //                                   child: Icon(
+                      //                                     Icons.restart_alt_rounded,
+                      //                                     size: 20,
+                      //                                     color: Theme.of(context)
+                      //                                         .colorScheme
+                      //                                         .primary,
+                      //                                   ),
+                      //                                 ),
+                      //                               ),
+                      //                             ),
+                      //                           ),
+                      //                         ),
+                      //                       ),
+                      //                     ),
+                      //               ],
+                      //             );
+                      //           },
+                      //         ),
+                      //       ),
+                      //       const SizedBox(width: 24),
 
-                        // Pitch
-                        Expanded(
-                          child: Consumer<EqualizerProvider>(
-                            builder: (context, value, child) {
-                              final bool enabled = value.isEqEnabled;
-                              final Color activeColor =
-                                  Theme.of(context).colorScheme.secondary;
-                              final Color inactiveColor = Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.2);
+                      //       // Pitch
+                      //       Expanded(
+                      //         child: Consumer<EqualizerProvider>(
+                      //           builder: (context, value, child) {
+                      //             final bool enabled = value.isEqEnabled;
+                      //             final Color activeColor =
+                      //                 Theme.of(context).colorScheme.secondary;
+                      //             final Color inactiveColor = Theme.of(context)
+                      //                 .colorScheme
+                      //                 .onSurface
+                      //                 .withValues(alpha: 0.2);
 
-                              return Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerLow,
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .shadow
-                                              .withValues(alpha: 0.05),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: AnimatedOpacity(
-                                      duration:
-                                          const Duration(milliseconds: 250),
-                                      opacity: enabled ? 1.0 : 0.4,
-                                      child: SleekCircularSlider(
-                                        min: 0.5,
-                                        max: 2.0,
-                                        initialValue: value.pitchval,
-                                        key:
-                                            ValueKey('pitch-${value.pitchval}'),
-                                        appearance: CircularSliderAppearance(
-                                              size: 140,
-                                          customWidths: CustomSliderWidths(
-                                                progressBarWidth: 10,
-                                                trackWidth: 5,
-                                                handlerSize: 12,
-                                          ),
-                                          customColors: CustomSliderColors(
-                                            dotColor: enabled
-                                                ? activeColor
-                                                : Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurface
-                                                    .withValues(alpha: 0.3),
-                                                progressBarColors: enabled
-                                                    ? [
-                                                        activeColor,
-                                                        activeColor.withValues(
-                                                            alpha: 0.7),
-                                                      ]
-                                                    : [Colors.transparent],
-                                            trackColor: inactiveColor,
-                                            trackColors: [
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withValues(alpha: 0.2),
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .secondary
-                                                  .withValues(alpha: 0.2),
-                                            ],
-                                                hideShadow: false,
-                                          ),
-                                          infoProperties: InfoProperties(
-                                            mainLabelStyle: TextStyle(
-                                                  fontSize: 24,
-                                                  fontWeight: FontWeight.bold,
-                                              color: enabled
-                                                      ? activeColor
-                                                  : Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface
-                                                          .withValues(
-                                                              alpha: 0.4),
-                                            ),
-                                            topLabelStyle: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                  letterSpacing: 1.2,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                            topLabelText: 'PITCH',
-                                            modifier: (double val) =>
-                                                '${val.toStringAsFixed(2)}x',
-                                          ),
-                                        ),
-                                            onChange: enabled
-                                            ? (val) {
-                                                value.setpitchval(val);
-                                                  }
-                                                : null,
-                                            onChangeEnd: enabled
-                                                ? (val) {
-                                                widget.onPitchChanged
-                                                    ?.call(val);
-                                              }
-                                            : null,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                      SizedBox(
-                                        height: 44,
-                                        child: Center(
-                                          child: AnimatedOpacity(
-                                            opacity: (enabled &&
-                                                    value.pitchval !=
-                                                        EqualizerProvider
-                                                            .defaultPitchVal)
-                                                ? 1.0
-                                                : 0.0,
-                                            duration: const Duration(
-                                                milliseconds: 200),
-                                            child: AnimatedScale(
-                                              scale: (enabled &&
-                                                      value.pitchval !=
-                                                          EqualizerProvider
-                                                              .defaultPitchVal)
-                                                  ? 1.0
-                                                  : 0.8,
-                                              duration: const Duration(
-                                                  milliseconds: 200),
-                                              child: Material(
-                                                color: Colors.transparent,
-                                                child: InkWell(
-                                                  borderRadius:
-                                                      BorderRadius.circular(20),
-                                                  onTap: () {
-                                                    value.resetPitch();
-                                                    widget.onPitchChanged?.call(
-                                                        EqualizerProvider
-                                                            .defaultPitchVal);
-                                                  },
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                            10),
-                                                    decoration: BoxDecoration(
-                                                      gradient: LinearGradient(
-                                                        colors: [
-                                                          Theme.of(context)
-                                                              .colorScheme
-                                                              .secondaryContainer,
-                                                          Theme.of(context)
-                                                              .colorScheme
-                                                              .secondaryContainer
-                                                              .withValues(
-                                                                  alpha: 0.7),
-                                                        ],
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              20),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color:
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .secondary
-                                                                  .withValues(
-                                                                      alpha:
-                                                                          0.2),
-                                                          blurRadius: 8,
-                                                          offset: const Offset(
-                                                              0, 2),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    child: Icon(
-                                                      Icons.restart_alt_rounded,
-                                                      size: 20,
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .secondary,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              
-                  const SizedBox(height: 16),
-              
-                  // Bands section - direct FutureBuilder like original package
-                  FutureBuilder<List<int>>(
-                    future: EqualizerFlutter.getBandLevelRange(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-              
-                      if (!snapshot.hasData || snapshot.data!.length < 2) {
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceVariant,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text('Equalizer unavailable',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface)),
-                              const SizedBox(height: 8),
-                              Text(
-                                  'Session ID: ${widget.playerSessionId}\n'
-                                  'Data: ${snapshot.data}\n'
-                                  'Error: ${snapshot.error}\n'
-                                  'Make sure audio is playing and try reopening.',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withValues(alpha: 0.7))),
-                            ],
-                          ),
-                        );
-                      }
-              
-                      // We have valid band range data
-                      return Customeq(
-                        snapshot.data![0].toDouble(),
-                        snapshot.data![1].toDouble(),
-                        widget.sliderBoxHeight,
-                        widget.sliderBoxBackgroundColor,
-                        widget.sliderBoxBorderRadius,
-                        widget.inactiveTrackBar,
-                        widget.midPointBgColor,
-                        widget.midPointColorActive,
-                        widget.midPointColorInactive,
-                        widget.midPointIcon,
-                        widget.activeDisabledTrackBarColor,
-                        widget.inactiveDisabledTrackBarColor,
-                        widget.activeTrackBarMaxColor,
-                        widget.activeTrackBarMinColor,
-                        widget.dragIndicatorActiveColor,
-                        widget.dragIndicatorInactiveColor,
-                        widget.bandTextColor,
-                        widget.bandTextFontSize,
-                        widget.sliderBoxPadding,
-                      );
-                    },
-                  ),
+                      //             return Column(
+                      //               children: [
+                      //                 Container(
+                      //                   padding: const EdgeInsets.all(16),
+                      //                   decoration: BoxDecoration(
+                      //                     color: Theme.of(context)
+                      //                         .colorScheme
+                      //                         .surfaceContainerLow,
+                      //                     borderRadius: BorderRadius.circular(20),
+                      //                     boxShadow: [
+                      //                       BoxShadow(
+                      //                         color: Theme.of(context)
+                      //                             .colorScheme
+                      //                             .shadow
+                      //                             .withValues(alpha: 0.05),
+                      //                         blurRadius: 8,
+                      //                         offset: const Offset(0, 4),
+                      //                       ),
+                      //                     ],
+                      //                   ),
+                      //                   child: AnimatedOpacity(
+                      //                     duration:
+                      //                         const Duration(milliseconds: 250),
+                      //                     opacity: enabled ? 1.0 : 0.4,
+                      //                         child: Column(
+                      //                           children: [
+                      //                             Slider(
+                      //                               value: value.pitchval,
+                      //                               min: 0.5,
+                      //                               max: 2.0,
+                      //                               divisions: 150,
+                      //                               label:
+                      //                                   '${value.pitchval.toStringAsFixed(2)}x',
+                      //                               onChanged: enabled
+                      //                                   ? (v) =>
+                      //                                       value.setpitchval(v)
+                      //                                   : null,
+                      //                               onChangeEnd: enabled
+                      //                                   ? (v) => widget
+                      //                                       .onPitchChanged
+                      //                                       ?.call(v)
+                      //                                   : null,
+                      //                         ),
+                      //                             const SizedBox(height: 6),
+                      //                             Text(
+                      //                               '${value.pitchval.toStringAsFixed(2)}x',
+                      //                               style: TextStyle(
+                      //                                 fontWeight: FontWeight.w600,
+                      //                             color: enabled
+                      //                                     ? activeColor
+                      //                                 : Theme.of(context)
+                      //                                     .colorScheme
+                      //                                     .onSurface
+                      //                                         .withValues(
+                      //                                             alpha: 0.6),
+                      //                               ),
+                      //                             ),
+                      //                           ],
+                      //                     ),
+                      //                   ),
+                      //                 ),
+                      //                 const SizedBox(height: 8),
+                      //                     SizedBox(
+                      //                       height: 44,
+                      //                       child: Center(
+                      //                         child: AnimatedOpacity(
+                      //                           opacity: (enabled &&
+                      //                                   value.pitchval !=
+                      //                                       EqualizerProvider
+                      //                                           .defaultPitchVal)
+                      //                               ? 1.0
+                      //                               : 0.0,
+                      //                           duration: const Duration(
+                      //                               milliseconds: 200),
+                      //                           child: AnimatedScale(
+                      //                             scale: (enabled &&
+                      //                                     value.pitchval !=
+                      //                                         EqualizerProvider
+                      //                                             .defaultPitchVal)
+                      //                                 ? 1.0
+                      //                                 : 0.8,
+                      //                             duration: const Duration(
+                      //                                 milliseconds: 200),
+                      //                             child: Material(
+                      //                               color: Colors.transparent,
+                      //                               child: InkWell(
+                      //                                 borderRadius:
+                      //                                     BorderRadius.circular(20),
+                      //                                 onTap: () {
+                      //                                   value.resetPitch();
+                      //                                   widget.onPitchChanged?.call(
+                      //                                       EqualizerProvider
+                      //                                           .defaultPitchVal);
+                      //                                 },
+                      //                                 child: Container(
+                      //                                   padding:
+                      //                                       const EdgeInsets.all(
+                      //                                           10),
+                      //                                   decoration: BoxDecoration(
+                      //                                     gradient: LinearGradient(
+                      //                                       colors: [
+                      //                                         Theme.of(context)
+                      //                                             .colorScheme
+                      //                                             .secondaryContainer,
+                      //                                         Theme.of(context)
+                      //                                             .colorScheme
+                      //                                             .secondaryContainer
+                      //                                             .withValues(
+                      //                                                 alpha: 0.7),
+                      //                                       ],
+                      //                                     ),
+                      //                                     borderRadius:
+                      //                                         BorderRadius.circular(
+                      //                                             20),
+                      //                                     boxShadow: [
+                      //                                       BoxShadow(
+                      //                                         color:
+                      //                                             Theme.of(context)
+                      //                                                 .colorScheme
+                      //                                                 .secondary
+                      //                                                 .withValues(
+                      //                                                     alpha:
+                      //                                                         0.2),
+                      //                                         blurRadius: 8,
+                      //                                         offset: const Offset(
+                      //                                             0, 2),
+                      //                                       ),
+                      //                                     ],
+                      //                                   ),
+                      //                                   child: Icon(
+                      //                                     Icons.restart_alt_rounded,
+                      //                                     size: 20,
+                      //                                     color: Theme.of(context)
+                      //                                         .colorScheme
+                      //                                         .secondary,
+                      //                                   ),
+                      //                                 ),
+                      //                               ),
+                      //                             ),
+                      //                           ),
+                      //                         ),
+                      //                       ),
+                      //                     ),
+                      //               ],
+                      //             );
+                      //           },
+                      //         ),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ),
+
+                      // const Spacer(),
                     ],
                   ),
                 ),

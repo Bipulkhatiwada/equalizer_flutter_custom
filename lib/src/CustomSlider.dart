@@ -40,6 +40,43 @@ Widget CustomSlider(
           : const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: Column(
         children: [
+          Consumer<EqualizerProvider>(
+            builder: (context, value, child) {
+              if (value.bands.length <= bandId) {
+                return const SizedBox.shrink();
+              }
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.2),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  "${value.bands[bandId].toInt()}dB",
+                  style: TextStyle(
+                    fontSize:
+                        bandTextFontSize != null ? bandTextFontSize - 2 : 12,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(
+            height: 8,
+          ),
           Container(
             height: sliderBoxHeight ?? 240,
             decoration: BoxDecoration(
@@ -84,13 +121,13 @@ Widget CustomSlider(
             ),
             child: Consumer<EqualizerProvider>(
               builder: (context, value, child) {
-                if (value.bands.length <= bandId) {
-                  return const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2));
-                }
+                // if (value.bands.length <= bandId) {
+                //   return const Center(
+                //       child: CircularProgressIndicator(strokeWidth: 2));
+                // }
 
                 // Show loading overlay when applying preset
-                Widget sliderContent = Padding(
+                return Padding(
                   padding:
                       const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                   child: FlutterSlider(
@@ -102,7 +139,7 @@ Widget CustomSlider(
                         value.changeFreq(bandId, lowerValue.toInt());
                       },
                     key: ValueKey(
-                        'band-${bandId}-${value.bands[bandId]}-${value.isApplyingPreset}'),
+                          'band-$bandId-${value.bands[bandId]}-${value.isApplyingPreset}'),
                     trackBar: FlutterSliderTrackBar(
                       inactiveTrackBar: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
@@ -270,36 +307,6 @@ Widget CustomSlider(
                     
                   ),
                     ));
-
-                // Wrap with loading overlay when applying preset
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    sliderContent,
-                    if (value.isApplyingPreset)
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surface
-                              .withValues(alpha: 0.7),
-                          borderRadius: sliderBoxBorderRadius ??
-                              BorderRadius.circular(20),
-                        ),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
               },
             ),
           ),
@@ -312,43 +319,6 @@ Widget CustomSlider(
               }
               return Column(
                 children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(context).colorScheme.primaryContainer,
-                          Theme.of(context)
-                              .colorScheme
-                              .primaryContainer
-                              .withValues(alpha: 0.7),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withValues(alpha: 0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      "${value.bands[bandId].toInt()}dB",
-                      style: TextStyle(
-                        fontSize: bandTextFontSize != null
-                            ? bandTextFontSize! - 2
-                            : 12,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 8),
                   Container(
                     padding:
