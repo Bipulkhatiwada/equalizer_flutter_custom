@@ -59,6 +59,7 @@ class EqualizerProvider extends ChangeNotifier {
   void setEqEnabled(bool cond) {
     isEqEnabled = cond;
     readyEqualiser(cond);
+    _saveIsEqEnabled(); // Save the state when it changes
     notifyListeners();
   }
 
@@ -188,6 +189,7 @@ class EqualizerProvider extends ChangeNotifier {
   static const _kBassKey = 'eq_bass';
   static const _kPresetKey = 'eq_preset';
   static const _kCustomKey = 'eq_custom';
+  static const _kIsEqEnabledKey = 'eq_enabled';
 
   Future<void> loadSavedSettings() async {
     try {
@@ -197,13 +199,15 @@ class EqualizerProvider extends ChangeNotifier {
       final savedBass = prefs.getDouble(_kBassKey);
       final savedPreset = prefs.getString(_kPresetKey);
       final savedCustom = prefs.getBool(_kCustomKey);
+      final savedIsEqEnabled = prefs.getBool(_kIsEqEnabledKey);
       print(
-          'EqualizerProvider: loadSavedSettings() - got saved values -> pitch: $savedPitch, bass: $savedBass, preset: $savedPreset, custom: $savedCustom');
+          'EqualizerProvider: loadSavedSettings() - got saved values -> pitch: $savedPitch, bass: $savedBass, preset: $savedPreset, custom: $savedCustom, isEqEnabled: $savedIsEqEnabled');
 
       if (savedPitch != null) pitchval = savedPitch;
       if (savedBass != null) bassval = savedBass;
       if (savedPreset != null) currentp = savedPreset;
       if (savedCustom != null) custom = savedCustom;
+      if (savedIsEqEnabled != null) isEqEnabled = savedIsEqEnabled;
 
       // If preset is saved but presets not yet loaded, validation occurs after getPresest()
       notifyListeners();
@@ -238,6 +242,17 @@ class EqualizerProvider extends ChangeNotifier {
       await prefs.setBool(_kCustomKey, custom);
     } catch (e) {
       print('EqualizerProvider: _savePreset error: $e');
+    }
+  }
+
+  Future<void> _saveIsEqEnabled() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kIsEqEnabledKey, isEqEnabled);
+      debugPrint(
+          'EqualizerProvider: _saveIsEqEnabled - Saved isEqEnabled: $isEqEnabled');
+    } catch (e) {
+      print('EqualizerProvider: _saveIsEqEnabled error: $e');
     }
   }
 
@@ -356,3 +371,5 @@ class EqualizerProvider extends ChangeNotifier {
   }
 
 }
+
+

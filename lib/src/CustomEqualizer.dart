@@ -3,6 +3,7 @@ import 'package:equalizer_flutter_custom/src/EqalizerProvider/EqualizerProvider.
 import 'package:equalizer_flutter_custom/src/Customeq.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CustomEqualizer extends StatefulWidget {
   const CustomEqualizer(
@@ -84,7 +85,7 @@ class CustomEqualizer extends StatefulWidget {
   final Color? bgColor;
 
   final double? sliderBoxPadding;
-  
+
   /// Callback when pitch value changes - use this to apply pitch to audio player
   final void Function(double pitch)? onPitchChanged;
 
@@ -106,7 +107,6 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
   void initState() {
     super.initState();
     _iniaudio();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _deffun());
   }
 
   Future<void> _iniaudio() async {
@@ -130,13 +130,24 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
     }
 
     final provider = context.read<EqualizerProvider>();
-    provider.setEqEnabled(widget.isEqEnabled);
 
     // Load persisted settings if available (always attempt this)
     print('CustomEqualizer: calling provider.loadSavedSettings()');
     await provider.loadSavedSettings();
+
+    // Check shared preferences directly to determine if we had a saved value for isEqEnabled
+    final prefs = await SharedPreferences.getInstance();
+    final savedIsEqEnabled = prefs.getBool('eq_enabled');
+
+    // Only set the initial state from widget if no saved state exists in shared preferences
+    if (savedIsEqEnabled == null) {
+      // No saved state exists, use widget's initial value
+      provider.setEqEnabled(widget.isEqEnabled);
+    }
+    // If saved state exists, it's already loaded by loadSavedSettings() and provider.isEqEnabled reflects the saved value
+
     print(
-        'CustomEqualizer: loadSavedSettings complete -> pitch=${provider.pitchval}, bass=${provider.bassval}, preset=${provider.currentp}');
+        'CustomEqualizer: loadSavedSettings complete -> pitch=${provider.pitchval}, bass=${provider.bassval}, preset=${provider.currentp}, isEqEnabled=${provider.isEqEnabled}');
 
     // Check if values were actually loaded from storage by comparing with defaults
     bool pitchLoadedFromStorage =
@@ -170,14 +181,10 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
 
       await provider.fetchBandLevels(); // This populates the bands array
       print(
-          'CustomEqualizer: Init complete, bands: ${provider.bands.length}, pitch: ${provider.pitchval}, bass: ${provider.bassval}, preset: ${provider.currentp}');
+          'CustomEqualizer: Init complete, bands: ${provider.bands.length}, pitch: ${provider.pitchval}, bass: ${provider.bassval}, preset: ${provider.currentp}, isEqEnabled: ${provider.isEqEnabled}');
     } catch (e) {
       print('CustomEqualizer: Init error: $e');
     }
-  }
-
-  void _deffun() {
-    context.read<EqualizerProvider>().setEqEnabled(widget.isEqEnabled);
   }
 
   // Preset handling
@@ -227,7 +234,7 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Row(
+                      const Row(
                         children: [
                           Text('Audio Controls',
                               style: TextStyle(
@@ -300,7 +307,7 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
     );
   }
 
-  String dropdownValue = 'Dog';
+  String dropdownValue = '';
 
   @override
   Widget build(BuildContext context) {
@@ -319,35 +326,49 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
         actions: [
           Consumer<EqualizerProvider>(
             builder: (context, value, child) {
-              return widget.customSwitch ??
-                  Switch(
-                    value: value.isEqEnabled,
-                    onChanged: (data) {
-                      value.isEqEnabled
-                          ? value.setEqEnabled(false)
-                          : value.setEqEnabled(true);
-                    },
-                    inactiveTrackColor: widget.inActiveSwitchTrackColor ??
-                        Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.12),
-                    activeColor: widget.activeSwitchColor ??
-                        Theme.of(context).colorScheme.onPrimary,
-                    activeTrackColor: widget.activeSwitchTrackColor ??
-                        Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.5),
-                    trackOutlineColor: WidgetStateProperty.resolveWith<Color?>(
-                      (Set<WidgetState> states) {
-                        if (states.contains(WidgetState.selected)) {
-                          return Theme.of(context).colorScheme.primary;
-                        }
-                        return null;
-                      },
-                    ),
-                  );
+              return Row(
+                children: [
+                  widget.customSwitch ??
+                      Switch(
+                        value: value.isEqEnabled,
+                        onChanged: (bool newValue) {
+                          value.setEqEnabled(newValue);
+                        },
+                        inactiveTrackColor: widget.inActiveSwitchTrackColor ??
+                            Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.12),
+                        activeColor: widget.activeSwitchColor ??
+                            Theme.of(context).colorScheme.onPrimary,
+                        activeTrackColor: widget.activeSwitchTrackColor ??
+                            Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.5),
+                        trackOutlineColor:
+                            WidgetStateProperty.resolveWith<Color?>(
+                          (Set<WidgetState> states) {
+                            if (states.contains(WidgetState.selected)) {
+                              return Theme.of(context).colorScheme.primary;
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                  Row(
+                    children: [
+                      IconButton(
+                        iconSize: 32,
+                        tooltip: 'Show linear audio controls',
+                        icon: Icon(Icons.view_list_rounded,
+                            color: Theme.of(context).colorScheme.primary),
+                        onPressed: () => _showLinearAudioControls(context),
+                      ),
+                    ],
+                  ),
+                ],
+              );
             },
           )
         ],
@@ -364,557 +385,192 @@ class _CustomEqualizerState extends State<CustomEqualizer> {
             ],
           ),
         ),
-        child: Center(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              spacing: 16,
-              children: [
-                // Content
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  // Presets dropdown - use Consumer to always get latest state
-                  Consumer<EqualizerProvider>(
-                    builder: (context, provider, child) {
-                      if (provider.presets.isEmpty) {
-                        // Load presets if not yet loaded
-                        provider.getPresest();
-                        return const SizedBox();
-                      }
-                      final presets = provider.presets;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.library_music_rounded,
-                                    size: 20,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text('Presets',
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 16,
+            children: [
+              // Content
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Presets dropdown - use Consumer to always get latest state
+                    Consumer<EqualizerProvider>(
+                      builder: (context, provider, child) {
+                        if (provider.presets.isEmpty) {
+                          // Load presets if not yet loaded
+                          provider.getPresest();
+                          return const SizedBox();
+                        }
+                        final presets = provider.presets;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.library_music_rounded,
+                                  size: 20,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text('Presets',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant)),
+                                const Spacer(),
+                                DropdownButton<String>(
+                                  value: presets.contains(provider.currentp)
+                                      ? provider.currentp
+                                      : (provider.custom
+                                          ? null
+                                          : presets.first),
+                                  hint: Text('Custom',
                                       style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
                                           color: Theme.of(context)
                                               .colorScheme
                                               .onSurfaceVariant)),
-                                  const Spacer(),
-                                  DropdownButton<String>(
-                                    value: presets.contains(provider.currentp)
-                                        ? provider.currentp
-                                        : (provider.custom
-                                            ? null
-                                            : presets.first),
-                                    hint: Text('Custom',
-                                        style: TextStyle(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant)),
-                                    isExpanded: false,
-                                    underline: const SizedBox(),
-                                    dropdownColor:
-                                        Theme.of(context).colorScheme.surface,
-                                    icon: Icon(
-                                      Icons.arrow_drop_down_rounded,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                      size: 28,
-                                    ),
-                                    items: presets
-                                        .map((p) => DropdownMenuItem<String>(
-                                              value: p,
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                ),
-                                                child: Text(p,
-                                                    style: TextStyle(
-                                                        color: Theme.of(context)
-                                                            .colorScheme
-                                                            .onSurface,
-                                                        fontSize: 14)),
-                                              ),
-                                            ))
-                                        .toList(),
-                                    onChanged: provider.isEqEnabled
-                                        ? (v) {
-                                            if (v != null) {
-                                              print(
-                                                  'CustomEqualizer: dropdown selected => $v');
-                                              _setPreset(context, v);
-                                            }
-                                          }
-                                        : null,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 8),
-                                    borderRadius: BorderRadius.circular(12),
+                                  isExpanded: false,
+                                  underline: const SizedBox(),
+                                  dropdownColor:
+                                      Theme.of(context).colorScheme.surface,
+                                  icon: Icon(
+                                    Icons.arrow_drop_down_rounded,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    size: 28,
                                   ),
-                                ],
-                              ),
-                             
-                          if (provider.isApplyingPreset) ...[
-                            const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: LinearProgressIndicator(
-                                minHeight: 4,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Theme.of(context).colorScheme.primary,
+                                  items: presets
+                                      .map((p) => DropdownMenuItem<String>(
+                                            value: p,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: Text(p,
+                                                  style: TextStyle(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurface,
+                                                      fontSize: 14)),
+                                            ),
+                                          ))
+                                      .toList(),
+                                  onChanged: provider.isEqEnabled
+                                      ? (v) {
+                                          if (v != null) {
+                                            print(
+                                                'CustomEqualizer: dropdown selected => $v');
+                                            _setPreset(context, v);
+                                          }
+                                        }
+                                      : null,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerHighest,
-                              ),
+                              ],
                             ),
+                            if (provider.isApplyingPreset) ...[
+                              const SizedBox(height: 12),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: LinearProgressIndicator(
+                                  minHeight: 4,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Theme.of(context).colorScheme.primary,
+                                  ),
+                                  backgroundColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
                           ],
-                          const SizedBox(height: 20),
-                        ],
-                      );
-                        },
-                      ),
-                      FutureBuilder<List<int>>(
-                        future: EqualizerFlutter.getBandLevelRange(),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          }
+                        );
+                      },
+                    ),
+                    FutureBuilder<List<int>>(
+                      future: EqualizerFlutter.getBandLevelRange(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
 
-                          if (!snapshot.hasData || snapshot.data!.length < 2) {
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceVariant,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Text('Equalizer unavailable',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface)),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                      'Session ID: ${widget.playerSessionId}\n'
-                                      'Data: ${snapshot.data}\n'
-                                      'Error: ${snapshot.error}\n'
-                                      'Make sure audio is playing and try reopening.',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface
-                                              .withValues(alpha: 0.7))),
-                                ],
-                              ),
-                            );
-                          }
-
-                          // We have valid band range data
-                          return Customeq(
-                            snapshot.data![0].toDouble(),
-                            snapshot.data![1].toDouble(),
-                            widget.sliderBoxHeight,
-                            widget.sliderBoxBackgroundColor,
-                            widget.sliderBoxBorderRadius,
-                            widget.inactiveTrackBar,
-                            widget.midPointBgColor,
-                            widget.midPointColorActive,
-                            widget.midPointColorInactive,
-                            widget.midPointIcon,
-                            widget.activeDisabledTrackBarColor,
-                            widget.inactiveDisabledTrackBarColor,
-                            widget.activeTrackBarMaxColor,
-                            widget.activeTrackBarMinColor,
-                            widget.dragIndicatorActiveColor,
-                            widget.dragIndicatorInactiveColor,
-                            widget.bandTextColor,
-                            widget.bandTextFontSize,
-                            widget.sliderBoxPadding,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      // Bass and pitch controls section
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.tune_rounded,
-                            size: 20,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Audio Controls',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
+                        if (!snapshot.hasData || snapshot.data!.length < 2) {
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color:
+                                  Theme.of(context).colorScheme.surfaceVariant,
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            tooltip: 'Show linear audio controls',
-                            icon: Icon(Icons.view_list_rounded,
-                                color: Theme.of(context).colorScheme.primary),
-                            onPressed: () => _showLinearAudioControls(context),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Container(
-                      //   padding: const EdgeInsets.symmetric(horizontal: 16),
-                      //   child: Row(
-                      //     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      //     children: [
-                      //       // Bass
-                      //       Expanded(
-                      //         child: Consumer<EqualizerProvider>(
-                      //           builder: (context, value, child) {
-                      //             final bool enabled = value.isEqEnabled;
-                      //             final Color activeColor =
-                      //                 Theme.of(context).colorScheme.primary;
-                      //             final Color inactiveColor = Theme.of(context)
-                      //                 .colorScheme
-                      //                 .onSurface
-                      //                 .withValues(alpha: 0.2);
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text('Equalizer unavailable',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface)),
+                                const SizedBox(height: 8),
+                                Text(
+                                    'Session ID: ${widget.playerSessionId}\n'
+                                    'Data: ${snapshot.data}\n'
+                                    'Error: ${snapshot.error}\n'
+                                    'Make sure audio is playing and try reopening.',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.7))),
+                              ],
+                            ),
+                          );
+                        }
 
-                      //             return Column(
-                      //               children: [
-                      //                 Container(
-                      //                   padding: const EdgeInsets.all(16),
-                      //                   decoration: BoxDecoration(
-                      //                     color: Theme.of(context)
-                      //                         .colorScheme
-                      //                         .surfaceContainerLow,
-                      //                     borderRadius: BorderRadius.circular(20),
-                      //                     boxShadow: [
-                      //                       BoxShadow(
-                      //                         color: Theme.of(context)
-                      //                             .colorScheme
-                      //                             .shadow
-                      //                             .withValues(alpha: 0.05),
-                      //                         blurRadius: 8,
-                      //                         offset: const Offset(0, 4),
-                      //                       ),
-                      //                     ],
-                      //                   ),
-                      //                   child: AnimatedOpacity(
-                      //                     duration:
-                      //                         const Duration(milliseconds: 250),
-                      //                     opacity: enabled ? 1.0 : 0.4,
-                      //                         child: Column(
-                      //                           children: [
-                      //                             Slider(
-                      //                               value: value.bassval,
-                      //                               min: 0,
-                      //                               max: 1000,
-                      //                               divisions: 100,
-                      //                               label:
-                      //                                   '${(value.bassval / 10).round()}%',
-                      //                               onChanged: enabled
-                      //                                   ? (v) => value.setbassval(v)
-                      //                                   : null,
-                      //                               onChangeEnd: enabled
-                      //                                   ? (v) => widget
-                      //                                       .onBassChanged
-                      //                                       ?.call(v)
-                      //                                   : null,
-                      //                         ),
-                      //                             const SizedBox(height: 6),
-                      //                             Text(
-                      //                               '${(value.bassval / 10).round()}%',
-                      //                               style: TextStyle(
-                      //                                 fontWeight: FontWeight.w600,
-                      //                             color: enabled
-                      //                                     ? activeColor
-                      //                                 : Theme.of(context)
-                      //                                     .colorScheme
-                      //                                     .onSurface
-                      //                                         .withValues(
-                      //                                             alpha: 0.6),
-                      //                               ),
-                      //                             ),
-                      //                           ],
-                      //                     ),
-                      //                   ),
-                      //                 ),
-                      //                 const SizedBox(height: 8),
-                      //                     SizedBox(
-                      //                       height: 44,
-                      //                       child: Center(
-                      //                         child: AnimatedOpacity(
-                      //                           opacity: (enabled &&
-                      //                                   value.bassval !=
-                      //                                       EqualizerProvider
-                      //                                           .defaultBassVal)
-                      //                               ? 1.0
-                      //                               : 0.0,
-                      //                           duration: const Duration(
-                      //                               milliseconds: 200),
-                      //                           child: AnimatedScale(
-                      //                             scale: (enabled &&
-                      //                                     value.bassval !=
-                      //                                         EqualizerProvider
-                      //                                             .defaultBassVal)
-                      //                                 ? 1.0
-                      //                                 : 0.8,
-                      //                             duration: const Duration(
-                      //                                 milliseconds: 200),
-                      //                             child: Material(
-                      //                               color: Colors.transparent,
-                      //                               child: InkWell(
-                      //                                 borderRadius:
-                      //                                     BorderRadius.circular(20),
-                      //                                 onTap: () {
-                      //                                   value.resetBass();
-                      //                                   widget.onBassChanged?.call(
-                      //                                       EqualizerProvider
-                      //                                           .defaultBassVal);
-                      //                                 },
-                      //                                 child: Container(
-                      //                                   padding:
-                      //                                       const EdgeInsets.all(
-                      //                                           10),
-                      //                                   decoration: BoxDecoration(
-                      //                                     gradient: LinearGradient(
-                      //                                       colors: [
-                      //                                         Theme.of(context)
-                      //                                             .colorScheme
-                      //                                             .primaryContainer,
-                      //                                         Theme.of(context)
-                      //                                             .colorScheme
-                      //                                             .primaryContainer
-                      //                                             .withValues(
-                      //                                                 alpha: 0.7),
-                      //                                       ],
-                      //                                     ),
-                      //                                     borderRadius:
-                      //                                         BorderRadius.circular(
-                      //                                             20),
-                      //                                     boxShadow: [
-                      //                                       BoxShadow(
-                      //                                         color:
-                      //                                             Theme.of(context)
-                      //                                                 .colorScheme
-                      //                                                 .primary
-                      //                                                 .withValues(
-                      //                                                     alpha:
-                      //                                                         0.2),
-                      //                                         blurRadius: 8,
-                      //                                         offset: const Offset(
-                      //                                             0, 2),
-                      //                                       ),
-                      //                                     ],
-                      //                                   ),
-                      //                                   child: Icon(
-                      //                                     Icons.restart_alt_rounded,
-                      //                                     size: 20,
-                      //                                     color: Theme.of(context)
-                      //                                         .colorScheme
-                      //                                         .primary,
-                      //                                   ),
-                      //                                 ),
-                      //                               ),
-                      //                             ),
-                      //                           ),
-                      //                         ),
-                      //                       ),
-                      //                     ),
-                      //               ],
-                      //             );
-                      //           },
-                      //         ),
-                      //       ),
-                      //       const SizedBox(width: 24),
-
-                      //       // Pitch
-                      //       Expanded(
-                      //         child: Consumer<EqualizerProvider>(
-                      //           builder: (context, value, child) {
-                      //             final bool enabled = value.isEqEnabled;
-                      //             final Color activeColor =
-                      //                 Theme.of(context).colorScheme.secondary;
-                      //             final Color inactiveColor = Theme.of(context)
-                      //                 .colorScheme
-                      //                 .onSurface
-                      //                 .withValues(alpha: 0.2);
-
-                      //             return Column(
-                      //               children: [
-                      //                 Container(
-                      //                   padding: const EdgeInsets.all(16),
-                      //                   decoration: BoxDecoration(
-                      //                     color: Theme.of(context)
-                      //                         .colorScheme
-                      //                         .surfaceContainerLow,
-                      //                     borderRadius: BorderRadius.circular(20),
-                      //                     boxShadow: [
-                      //                       BoxShadow(
-                      //                         color: Theme.of(context)
-                      //                             .colorScheme
-                      //                             .shadow
-                      //                             .withValues(alpha: 0.05),
-                      //                         blurRadius: 8,
-                      //                         offset: const Offset(0, 4),
-                      //                       ),
-                      //                     ],
-                      //                   ),
-                      //                   child: AnimatedOpacity(
-                      //                     duration:
-                      //                         const Duration(milliseconds: 250),
-                      //                     opacity: enabled ? 1.0 : 0.4,
-                      //                         child: Column(
-                      //                           children: [
-                      //                             Slider(
-                      //                               value: value.pitchval,
-                      //                               min: 0.5,
-                      //                               max: 2.0,
-                      //                               divisions: 150,
-                      //                               label:
-                      //                                   '${value.pitchval.toStringAsFixed(2)}x',
-                      //                               onChanged: enabled
-                      //                                   ? (v) =>
-                      //                                       value.setpitchval(v)
-                      //                                   : null,
-                      //                               onChangeEnd: enabled
-                      //                                   ? (v) => widget
-                      //                                       .onPitchChanged
-                      //                                       ?.call(v)
-                      //                                   : null,
-                      //                         ),
-                      //                             const SizedBox(height: 6),
-                      //                             Text(
-                      //                               '${value.pitchval.toStringAsFixed(2)}x',
-                      //                               style: TextStyle(
-                      //                                 fontWeight: FontWeight.w600,
-                      //                             color: enabled
-                      //                                     ? activeColor
-                      //                                 : Theme.of(context)
-                      //                                     .colorScheme
-                      //                                     .onSurface
-                      //                                         .withValues(
-                      //                                             alpha: 0.6),
-                      //                               ),
-                      //                             ),
-                      //                           ],
-                      //                     ),
-                      //                   ),
-                      //                 ),
-                      //                 const SizedBox(height: 8),
-                      //                     SizedBox(
-                      //                       height: 44,
-                      //                       child: Center(
-                      //                         child: AnimatedOpacity(
-                      //                           opacity: (enabled &&
-                      //                                   value.pitchval !=
-                      //                                       EqualizerProvider
-                      //                                           .defaultPitchVal)
-                      //                               ? 1.0
-                      //                               : 0.0,
-                      //                           duration: const Duration(
-                      //                               milliseconds: 200),
-                      //                           child: AnimatedScale(
-                      //                             scale: (enabled &&
-                      //                                     value.pitchval !=
-                      //                                         EqualizerProvider
-                      //                                             .defaultPitchVal)
-                      //                                 ? 1.0
-                      //                                 : 0.8,
-                      //                             duration: const Duration(
-                      //                                 milliseconds: 200),
-                      //                             child: Material(
-                      //                               color: Colors.transparent,
-                      //                               child: InkWell(
-                      //                                 borderRadius:
-                      //                                     BorderRadius.circular(20),
-                      //                                 onTap: () {
-                      //                                   value.resetPitch();
-                      //                                   widget.onPitchChanged?.call(
-                      //                                       EqualizerProvider
-                      //                                           .defaultPitchVal);
-                      //                                 },
-                      //                                 child: Container(
-                      //                                   padding:
-                      //                                       const EdgeInsets.all(
-                      //                                           10),
-                      //                                   decoration: BoxDecoration(
-                      //                                     gradient: LinearGradient(
-                      //                                       colors: [
-                      //                                         Theme.of(context)
-                      //                                             .colorScheme
-                      //                                             .secondaryContainer,
-                      //                                         Theme.of(context)
-                      //                                             .colorScheme
-                      //                                             .secondaryContainer
-                      //                                             .withValues(
-                      //                                                 alpha: 0.7),
-                      //                                       ],
-                      //                                     ),
-                      //                                     borderRadius:
-                      //                                         BorderRadius.circular(
-                      //                                             20),
-                      //                                     boxShadow: [
-                      //                                       BoxShadow(
-                      //                                         color:
-                      //                                             Theme.of(context)
-                      //                                                 .colorScheme
-                      //                                                 .secondary
-                      //                                                 .withValues(
-                      //                                                     alpha:
-                      //                                                         0.2),
-                      //                                         blurRadius: 8,
-                      //                                         offset: const Offset(
-                      //                                             0, 2),
-                      //                                       ),
-                      //                                     ],
-                      //                                   ),
-                      //                                   child: Icon(
-                      //                                     Icons.restart_alt_rounded,
-                      //                                     size: 20,
-                      //                                     color: Theme.of(context)
-                      //                                         .colorScheme
-                      //                                         .secondary,
-                      //                                   ),
-                      //                                 ),
-                      //                               ),
-                      //                             ),
-                      //                           ),
-                      //                         ),
-                      //                       ),
-                      //                     ),
-                      //               ],
-                      //             );
-                      //           },
-                      //         ),
-                      //       ),
-                      //     ],
-                      //   ),
-                      // ),
-
-                      // const Spacer(),
-                    ],
-                  ),
+                        // We have valid band range data
+                        return Customeq(
+                          snapshot.data![0].toDouble(),
+                          snapshot.data![1].toDouble(),
+                          widget.sliderBoxHeight,
+                          widget.sliderBoxBackgroundColor,
+                          widget.sliderBoxBorderRadius,
+                          widget.inactiveTrackBar,
+                          widget.midPointBgColor,
+                          widget.midPointColorActive,
+                          widget.midPointColorInactive,
+                          widget.midPointIcon,
+                          widget.activeDisabledTrackBarColor,
+                          widget.inactiveDisabledTrackBarColor,
+                          widget.activeTrackBarMaxColor,
+                          widget.activeTrackBarMinColor,
+                          widget.dragIndicatorActiveColor,
+                          widget.dragIndicatorInactiveColor,
+                          widget.bandTextColor,
+                          widget.bandTextFontSize,
+                          widget.sliderBoxPadding,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
