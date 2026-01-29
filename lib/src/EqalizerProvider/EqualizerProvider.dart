@@ -5,6 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class EqualizerProvider extends ChangeNotifier {
+  EqualizerProvider() {
+    // Start loading minimal persisted settings early so UI reflects saved toggle/pitch/bass quickly
+    _loadMinimalSettings();
+  }
+
   List<int> bandLevelRange = [];
   bool isBandRangeLoading = false;
 
@@ -190,6 +195,31 @@ class EqualizerProvider extends ChangeNotifier {
   static const _kPresetKey = 'eq_preset';
   static const _kCustomKey = 'eq_custom';
   static const _kIsEqEnabledKey = 'eq_enabled';
+
+  Future<void> _loadMinimalSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedPitch = prefs.getDouble(_kPitchKey);
+      final savedBass = prefs.getDouble(_kBassKey);
+      final savedIsEqEnabled = prefs.getBool(_kIsEqEnabledKey);
+      var changed = false;
+      if (savedPitch != null) {
+        pitchval = savedPitch;
+        changed = true;
+      }
+      if (savedBass != null) {
+        bassval = savedBass;
+        changed = true;
+      }
+      if (savedIsEqEnabled != null) {
+        isEqEnabled = savedIsEqEnabled;
+        changed = true;
+      }
+      if (changed) notifyListeners();
+    } catch (e) {
+      print('EqualizerProvider: _loadMinimalSettings error: $e');
+    }
+  }
 
   Future<void> loadSavedSettings() async {
     try {
