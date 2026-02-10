@@ -1,20 +1,17 @@
-import 'package:another_xlider/another_xlider.dart';
-import 'package:another_xlider/models/handler.dart';
-import 'package:another_xlider/models/trackbar.dart';
-import 'package:equalizer_flutter_custom/src/EqalizerProvider/EqualizerProvider.dart';
-import 'package:equalizer_flutter_custom/src/Themes/GlobalThemes.dart';
-import 'package:flutter/material.dart';
+// lib/packages/equalizer_flutter_custom/lib/src/CustomSlider.dart
 
+import 'package:equalizer_flutter_custom/src/EqalizerProvider/EqualizerProvider.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-GlobalThemes globalThemes = GlobalThemes();
-
+/// Creates a custom vertical slider for a single EQ band.
 Widget CustomSlider(
-  context,
-  int bandId,
-  int freq,
-  min,
-  max,
+  BuildContext context,
+  int bandIndex,
+  int frequency,
+  double min,
+  double max,
   double? sliderBoxHeight,
   Color? sliderBoxBackgroundColor,
   BorderRadiusGeometry? sliderBoxBorderRadius,
@@ -33,337 +30,288 @@ Widget CustomSlider(
   double? bandTextFontSize,
   double? sliderBoxPadding,
 ) {
-  return Expanded(
-    child: Padding(
-      padding: sliderBoxPadding != null
-          ? EdgeInsets.all(sliderBoxPadding)
-          : const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+  return _CustomSliderWidget(
+    bandIndex: bandIndex,
+    frequency: frequency,
+    min: min,
+    max: max,
+    sliderBoxHeight: sliderBoxHeight ?? 180,
+    sliderBoxBackgroundColor: sliderBoxBackgroundColor,
+    sliderBoxBorderRadius: sliderBoxBorderRadius,
+    inactiveTrackBar: inactiveTrackBar,
+    midPointBgColor: midPointBgColor,
+    midPointColorActive: midPointColorActive,
+    midPointColorInactive: midPointColorInactive,
+    midPointIcon: midPointIcon,
+    activeDisabledTrackBarColor: activeDisabledTrackBarColor,
+    inactiveDisabledTrackBarColor: inactiveDisabledTrackBarColor,
+    activeTrackBarMaxColor: activeTrackBarMaxColor,
+    activeTrackBarMinColor: activeTrackBarMinColor,
+    dragIndicatorActiveColor: dragIndicatorActiveColor,
+    dragIndicatorInactiveColor: dragIndicatorInactiveColor,
+    bandTextColor: bandTextColor,
+    bandTextFontSize: bandTextFontSize ?? 10,
+    sliderBoxPadding: sliderBoxPadding ?? 2,
+  );
+}
+
+class _CustomSliderWidget extends StatefulWidget {
+  final int bandIndex;
+  final int frequency;
+  final double min;
+  final double max;
+  final double sliderBoxHeight;
+  final Color? sliderBoxBackgroundColor;
+  final BorderRadiusGeometry? sliderBoxBorderRadius;
+  final Color? inactiveTrackBar;
+  final Color? midPointBgColor;
+  final Color? midPointColorActive;
+  final Color? midPointColorInactive;
+  final IconData? midPointIcon;
+  final Color? activeDisabledTrackBarColor;
+  final Color? inactiveDisabledTrackBarColor;
+  final Color? activeTrackBarMaxColor;
+  final Color? activeTrackBarMinColor;
+  final Color? dragIndicatorActiveColor;
+  final Color? dragIndicatorInactiveColor;
+  final Color? bandTextColor;
+  final double bandTextFontSize;
+  final double sliderBoxPadding;
+
+  const _CustomSliderWidget({
+    required this.bandIndex,
+    required this.frequency,
+    required this.min,
+    required this.max,
+    required this.sliderBoxHeight,
+    this.sliderBoxBackgroundColor,
+    this.sliderBoxBorderRadius,
+    this.inactiveTrackBar,
+    this.midPointBgColor,
+    this.midPointColorActive,
+    this.midPointColorInactive,
+    this.midPointIcon,
+    this.activeDisabledTrackBarColor,
+    this.inactiveDisabledTrackBarColor,
+    this.activeTrackBarMaxColor,
+    this.activeTrackBarMinColor,
+    this.dragIndicatorActiveColor,
+    this.dragIndicatorInactiveColor,
+    this.bandTextColor,
+    required this.bandTextFontSize,
+    required this.sliderBoxPadding,
+  });
+
+  @override
+  State<_CustomSliderWidget> createState() => _CustomSliderWidgetState();
+}
+
+class _CustomSliderWidgetState extends State<_CustomSliderWidget> {
+  double? _dragValue;
+  bool _isDragging = false;
+
+  String _formatFrequency(int freq) {
+    if (freq >= 1000) {
+      final kHz = freq / 1000;
+      return '${kHz.toStringAsFixed(kHz.truncateToDouble() == kHz ? 0 : 1)}k';
+    }
+    return '$freq';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final provider = context.watch<EqualizerProvider>();
+
+    final isEnabled = provider.isEqEnabled;
+    final currentBandValue = provider.bands.length > widget.bandIndex
+        ? provider.bands[widget.bandIndex].toDouble()
+        : 0.0;
+
+    final displayValue = _dragValue ?? currentBandValue;
+    final clampedValue = displayValue.clamp(widget.min, widget.max);
+
+    // Check if this is a vocal frequency band
+    final isVocalBand = provider.isVocalFrequency(widget.frequency);
+    final isPrimaryVocal = provider.isPrimaryVocalFrequency(widget.frequency);
+    final vocalActive = provider.vocalSuppressionLevel > 0.01;
+
+    // Colors
+    final activeTrackColor =
+        _getActiveTrackColor(cs, clampedValue, isVocalBand && vocalActive);
+    final inactiveTrackColor =
+        widget.inactiveTrackBar ?? cs.surfaceContainerHighest.withOpacity(0.6);
+    final thumbColor = isEnabled
+        ? (widget.dragIndicatorActiveColor ?? cs.primary)
+        : (widget.dragIndicatorInactiveColor ??
+            cs.onSurfaceVariant.withOpacity(0.3));
+    final textColor = widget.bandTextColor ?? cs.onSurfaceVariant;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: widget.sliderBoxPadding),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Consumer<EqualizerProvider>(
-            builder: (context, value, child) {
-              if (value.bands.length <= bandId) {
-                return const SizedBox.shrink();
-              }
-              return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.2),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
+          // Slider container - takes full width of parent
+          Container(
+            width: double.infinity,
+            height: widget.sliderBoxHeight,
+            decoration: BoxDecoration(
+              color: widget.sliderBoxBackgroundColor ??
+                  cs.surfaceContainerLow.withOpacity(0.5),
+              borderRadius:
+                  widget.sliderBoxBorderRadius ?? BorderRadius.circular(12),
+              border: isVocalBand && vocalActive
+                  ? Border.all(
+                      color: isPrimaryVocal
+                          ? cs.tertiary.withOpacity(0.5)
+                          : cs.tertiary.withOpacity(0.25),
+                      width: isPrimaryVocal ? 2 : 1.5,
+                    )
+                  : null,
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Mid-point indicator (0 dB line)
+                Positioned(
+                  top: widget.sliderBoxHeight / 2 - 1,
+                  left: 4,
+                  right: 4,
+                  child: Container(
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: widget.midPointBgColor ??
+                          cs.outlineVariant.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(1),
                     ),
-                  ],
-                ),
-                child: Text(
-                  "${value.bands[bandId].toInt()}dB",
-                  style: TextStyle(
-                    fontSize:
-                        bandTextFontSize != null ? bandTextFontSize - 2 : 12,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                    letterSpacing: 0.5,
                   ),
                 ),
-              );
-            },
-          ),
-          const SizedBox(
-            height: 8,
-          ),
-          Container(
-            height: sliderBoxHeight ?? 240,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  sliderBoxBackgroundColor ??
-                      Theme.of(context).colorScheme.surface,
-                  (sliderBoxBackgroundColor ??
-                          Theme.of(context).colorScheme.surface)
-                      .withValues(alpha: 0.95),
-                ],
-              ),
-              borderRadius: sliderBoxBorderRadius ?? BorderRadius.circular(24),
-              border: Border.all(
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary
-                    .withValues(alpha: 0.15),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.08),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                  spreadRadius: 2,
-                ),
-                BoxShadow(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .shadow
-                      .withValues(alpha: 0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+                
+                // Vocal indicator icon for primary vocal bands
+                if (isPrimaryVocal && vocalActive)
+                  Positioned(
+                    top: 8,
+                    child: Icon(
+                      Icons.mic_off_rounded,
+                      size: 12,
+                      color: cs.tertiary.withOpacity(0.6),
+                    ),
+                  ),
+                
+                // Vertical slider
+                RotatedBox(
+                  quarterTurns: -1,
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 5,
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 9,
+                        elevation: 2,
+                        pressedElevation: 4,
+                      ),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 18,
+                      ),
+                      activeTrackColor: isEnabled
+                          ? activeTrackColor
+                          : (widget.activeDisabledTrackBarColor ??
+                              cs.onSurfaceVariant.withOpacity(0.15)),
+                      inactiveTrackColor: isEnabled
+                          ? inactiveTrackColor
+                          : (widget.inactiveDisabledTrackBarColor ??
+                              cs.onSurfaceVariant.withOpacity(0.08)),
+                      thumbColor:
+                          isVocalBand && vocalActive ? cs.tertiary : thumbColor,
+                      overlayColor: (isVocalBand && vocalActive
+                              ? cs.tertiary
+                              : thumbColor)
+                          .withOpacity(0.12),
+                      trackShape: const RoundedRectSliderTrackShape(),
+                    ),
+                    child: Slider(
+                      value: clampedValue,
+                      min: widget.min,
+                      max: widget.max,
+                      onChanged: isEnabled
+                          ? (value) {
+                              setState(() {
+                                _dragValue = value;
+                                _isDragging = true;
+                              });
+                              provider.updateBandLevelDuringDrag(
+                                widget.bandIndex,
+                                value.round(),
+                              );
+                            }
+                          : null,
+                      onChangeEnd: isEnabled
+                          ? (value) {
+                              setState(() {
+                                _dragValue = null;
+                                _isDragging = false;
+                              });
+                              provider.changeFreq(
+                                widget.bandIndex,
+                                value.round(),
+                              );
+                              HapticFeedback.selectionClick();
+                            }
+                          : null,
+                    ),
+                  ),
                 ),
               ],
             ),
-            child: Consumer<EqualizerProvider>(
-              builder: (context, value, child) {
-                // if (value.bands.length <= bandId) {
-                //   return const Center(
-                //       child: CircularProgressIndicator(strokeWidth: 2));
-                // }
+          ),
+          
+          const SizedBox(height: 6),
 
-                // Show loading overlay when applying preset
-                return Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                  child: FlutterSlider(
-                      values: [value.bands[bandId].toDouble()],
-                      rtl: true,
-                      max: max,
-                      min: min,
-                      onDragCompleted: (handlerIndex, lowerValue, upperValue) {
-                        value.changeFreq(bandId, lowerValue.toInt());
-                      },
-                    key: ValueKey(
-                          'band-$bandId-${value.bands[bandId]}-${value.isApplyingPreset}'),
-                    trackBar: FlutterSliderTrackBar(
-                      inactiveTrackBar: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                          gradient: LinearGradient(
-                            colors: [
-                              (inactiveTrackBar ??
-                                      Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withValues(alpha: 0.1))
-                                  .withValues(alpha: 0.15),
-                              (inactiveTrackBar ??
-                                      Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withValues(alpha: 0.1))
-                                  .withValues(alpha: 0.05),
-                            ],
-                          ),
-                      ),
-                      centralWidget: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: midPointBgColor ??
-                              Theme.of(context).colorScheme.surface,
-                          border: Border.all(
-                            color: value.isEqEnabled
-                                ? (midPointColorActive ??
-                                        Theme.of(context).colorScheme.primary)
-                                    .withValues(alpha: 0.4)
-                                : (midPointColorInactive ??
-                                        Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(alpha: 0.3))
-                                    .withValues(alpha: 0.4),
-                            width: 2,
-                          ),
-                        ),
-                        child: Icon(
-                          midPointIcon ?? Icons.graphic_eq_outlined,
-                          size: 16,
-                          color: value.isEqEnabled
-                              ? midPointColorActive ??
-                                  Theme.of(context).colorScheme.primary
-                              : midPointColorInactive ??
-                                  Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(alpha: 0.5),
-                        ),
-                      ),
-                      activeDisabledTrackBarColor:
-                          activeDisabledTrackBarColor ??
-                              Theme.of(context).colorScheme.surfaceVariant,
-                      inactiveDisabledTrackBarColor:
-                          inactiveDisabledTrackBarColor ??
-                              Theme.of(context).colorScheme.surfaceVariant,
-                      activeTrackBar: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: LinearGradient(
-                          colors: value.bands[bandId].toDouble() >
-                                  (max + min) / 2
-                              ? [
-                                  activeTrackBarMaxColor ??
-                                      Theme.of(context).colorScheme.secondary,
-                                  (activeTrackBarMaxColor ??
-                                          Theme.of(context)
-                                              .colorScheme
-                                              .secondary)
-                                      .withValues(alpha: 0.8),
-                                ]
-                              : [
-                                  activeTrackBarMinColor ??
-                                      Theme.of(context).colorScheme.primary,
-                                  (activeTrackBarMinColor ??
-                                          Theme.of(context).colorScheme.primary)
-                                      .withValues(alpha: 0.8),
-                                ],
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                        ),
-                      ),
-                    ),
-                    axis: Axis.vertical,
-                    jump: true,
-                    visibleTouchArea: true,
-                    disabled: !value.isEqEnabled,
-                    handler: FlutterSliderHandler(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: value.isEqEnabled
-                            ? [
-                                BoxShadow(
-                                  color: (Theme.of(context).colorScheme.primary)
-                                            .withValues(alpha: 0.4),
-                                    blurRadius: 20,
-                                    spreadRadius: 6,
-                                ),
-                              ]
-                            : [],
-                      ),
-                      child: Container(
-                          width: 40,
-                          height: 40,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: value.isEqEnabled
-                                ? LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  colors: [
-                                    Theme.of(context).colorScheme.primary,
-                                    Theme.of(context).colorScheme.secondary,
-                                  ],
-                                )
-                              : null,
-                          color: value.isEqEnabled
-                              ? null
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.3),
-                          border: Border.all(
-                            color: value.isEqEnabled
-                                  ? Colors.white.withValues(alpha: 0.8)
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withValues(alpha: 0.5),
-                              width: 2.5,
-                          ),
-                            boxShadow: value.isEqEnabled
-                                ? [
-                                    BoxShadow(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.3),
-                                      blurRadius: 8,
-                                      spreadRadius: 2,
-                                    ),
-                                  ]
-                                : [],
-                        ),
-                        child: Center(
-                            child: Container(
-                              width: 20,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(2),
-                                color: value.isEqEnabled
-                                    ? dragIndicatorActiveColor ?? Colors.white
-                                : dragIndicatorInactiveColor ??
-                                    Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ),
-                    ),
-                    
-                  ),
-                    ));
-              },
+          // Frequency label
+          Text(
+            _formatFrequency(widget.frequency),
+            style: TextStyle(
+              fontSize: widget.bandTextFontSize,
+              fontWeight: FontWeight.w600,
+              color: isVocalBand && vocalActive
+                  ? cs.tertiary
+                  : textColor.withOpacity(isEnabled ? 0.8 : 0.4),
             ),
           ),
-          const SizedBox(height: 12),
-          // Display the current value of the slider
-          Consumer<EqualizerProvider>(
-            builder: (context, value, child) {
-              if (value.bands.length <= bandId) {
-                return const SizedBox.shrink();
-              }
-              return Column(
-                children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(context).colorScheme.secondaryContainer,
-                          Theme.of(context)
-                              .colorScheme
-                              .secondaryContainer
-                              .withValues(alpha: 0.7),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .secondary
-                              .withValues(alpha: 0.15),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      "${(freq / 1000).toStringAsFixed(freq >= 10000 ? 1 : 0)}kHz",
-                      style: TextStyle(
-                        fontSize: bandTextFontSize != null
-                            ? bandTextFontSize! - 2
-                            : 11,
-                        fontWeight: FontWeight.w600,
-                        color:
-                            Theme.of(context).colorScheme.onSecondaryContainer,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+          
+          // dB value label
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 150),
+            opacity: _isDragging || (clampedValue.abs() > 0.5) ? 1.0 : 0.0,
+            child: Text(
+              '${clampedValue.round() > 0 ? '+' : ''}${clampedValue.round()} dB',
+              style: TextStyle(
+                fontSize: widget.bandTextFontSize - 1,
+                fontWeight: FontWeight.w500,
+                color: activeTrackColor.withOpacity(isEnabled ? 0.9 : 0.4),
+              ),
+            ),
           ),
         ],
       ),
-    ),
-  );
+    );
+  }
+
+  Color _getActiveTrackColor(
+      ColorScheme cs, double value, bool isVocalSuppressed) {
+    if (isVocalSuppressed) {
+      return cs.tertiary;
+    }
+
+    final maxColor = widget.activeTrackBarMaxColor ?? cs.primary;
+    final minColor = widget.activeTrackBarMinColor ?? cs.error;
+
+    if (value >= 0) {
+      final t = value / widget.max;
+      return Color.lerp(cs.primary, maxColor, t) ?? cs.primary;
+    } else {
+      final t = value.abs() / widget.min.abs();
+      return Color.lerp(cs.primary, minColor, t) ?? cs.primary;
+    }
+  }
 }
